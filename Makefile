@@ -26,3 +26,6 @@ isort:
 # Serve docs
 serve:
 	$(CMD) mkdocs serve
+
+deploy:
+	$(CMD) mkdocs gh-deploy --force

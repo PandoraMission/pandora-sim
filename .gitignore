@@ -43,6 +43,7 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+site
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
