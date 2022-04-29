@@ -1,0 +1,23 @@
+site_name: PandoraSat
+nav:
+    - Home: README.md
+    - API:
+      - PandoraSat: pandorasat.md
+      - NIRDA : irdetector.md
+      - VISDA : visibledetector.md
+      - Optics : optics.md
+      - Orbit : orbit.md
+theme:
+  name: "material"
+  icon:
+      logo: material/clipboard
+repo_url: https://github.com/pandoramission/pandora-sat
+plugins:
+  - search
+  - mkdocs-jupyter:
+      execute: False
+      include_source: True
+      ignore_h1_titles: False
+  - mkdocstrings:
+      watch:
+        - src/pandorasat
