@@ -66,7 +66,7 @@ def qe(wavelength):
         (sw_wavecut_red - wavelength.to(u.micron).value) * sw_exponential), sw_qe)
 
     sw_qe = np.where(wavelength.to(u.micron).value < sw_wavecut_blue, sw_qe * np.exp(
-        - (sw_wavecut_blue - wavelength.to(u.micron).value) * sw_exponential), sw_qe)
+        - (sw_wavecut_blue - wavelength.to(u.micron).value) * (sw_exponential/1.5)), sw_qe)
                      
     return sw_qe * u.dimensionless_unscaled
 
