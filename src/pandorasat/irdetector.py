@@ -26,6 +26,8 @@ class IRDetector:
     gain: float = 2.7 * u.electron / u.DN
     npix_column: int = 2048 * u.pixel
     npix_row: int = 2048 * u.pixel
+    pix_scale: float = 1.19 * u.arcsec / u.pixel
+    pixel_size: float = 18.0 u.um / u.pixel
 
     # Readout Properties
     nreads: int = 4  # assumed number of non-destructive reads per integration %  I think we need a function here. Simulations required to build it.
