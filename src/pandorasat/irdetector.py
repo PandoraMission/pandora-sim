@@ -47,6 +47,8 @@ def qe(wavelength):
         qe (npt.NDArray): Array of the quantum efficiency of the detector
 
     """
+    if not hasattr(wavelength, "unit"):
+        raise ValueError("Pass a wavelength with units")
     wavelength = np.atleast_1d(wavelength)
     sw_coeffs = np.array([0.65830, -0.05668, 0.25580, -0.08350])
     sw_exponential = 100.0
