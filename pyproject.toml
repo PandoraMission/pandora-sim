@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "pandora-sat"
+name = "pandorasat"
 version = "0.1.0"
 description = ""
 authors = ["Christina Hedges <christina.l.hedges@nasa.gov>"]
