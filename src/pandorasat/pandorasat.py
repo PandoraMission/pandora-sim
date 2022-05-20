@@ -1,10 +1,11 @@
 """Holds metadata and methods on Pandora"""
 
 from dataclasses import dataclass
+
 from .irdetector import IRDetector
-from .visibledetector import VisibleDetector
-from .orbit import Orbit
 from .optics import Optics
+from .orbit import Orbit
+from .visibledetector import VisibleDetector
 
 
 @dataclass

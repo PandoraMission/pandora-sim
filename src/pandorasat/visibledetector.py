@@ -1,6 +1,7 @@
 """Holds metadata and methods on Pandora VISDA"""
 
 from dataclasses import dataclass
+
 import astropy.units as u
 
 

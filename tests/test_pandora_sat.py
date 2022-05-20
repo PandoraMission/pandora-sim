@@ -1,5 +1,4 @@
-from pandorasat import __version__
-from pandorasat import PandoraSat
+from pandorasat import PandoraSat, __version__
 
 
 def test_version():

@@ -1,8 +1,9 @@
 """Holds basic metadata on the optics of Pandora"""
 
 from dataclasses import dataclass
-import astropy.units as u
 from typing import Tuple
+
+import astropy.units as u
 from numpy import typing as npt
 
 
