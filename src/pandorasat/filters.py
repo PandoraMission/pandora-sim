@@ -28,11 +28,12 @@ zeropoints = {
     "2MASS_J": 3.13e-10 * u.erg / u.cm**2 / u.s / u.angstrom,
     "2MASS_H": 1.13e-10 * u.erg / u.cm**2 / u.s / u.angstrom,
     "2MASS_Ks": 4.28e-11 * u.erg / u.cm**2 / u.s / u.angstrom,
+    "Pandora_Visible": np.nan,
 }
 
 
 @dataclass
-class filter(object):
+class Filter(object):
     name: str
 
     def __post_init__(self):
@@ -49,7 +50,11 @@ class filter(object):
         self.wavelength, self._transmission = np.asarray(
             df.Wavelength
         ) * u.angstrom, np.asarray(df.Transmission)
-        self.flux_zero_point = zeropoints[self.name]
+        self.flux_zero_point = (
+            zeropoints[self.name]
+            if np.isfinite(zeropoints[self.name])
+            else self._estimate_zeropoint()
+        )
 
     def __repr__(self):
         return f"filter ({self.name})"
@@ -57,6 +62,18 @@ class filter(object):
     @property
     def midpoint(self):
         return np.average(self.wavelength, weights=self._transmission)
+
+    def _estimate_zeropoint(self):
+        wavelength, spectrum = load_vega()
+        transmission = np.interp(
+            wavelength.value,
+            self.wavelength.value,
+            self._transmission,
+        )
+        zeropoint = np.trapz(
+            wavelength * spectrum * transmission, wavelength
+        ) / np.trapz(wavelength * transmission, wavelength)
+        return zeropoint
 
     def mag_from_flux(self, flux):
         return -2.5 * np.log10(flux / self.flux_zero_point)
