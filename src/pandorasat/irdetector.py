@@ -1,9 +1,11 @@
 """Holds metadata and methods on Pandora NIRDA"""
 
 from dataclasses import dataclass
+
 import astropy.units as u
-from numpy import typing as npt
 import numpy as np
+from numpy import typing as npt
+
 from .optics import Optics
 
 
@@ -30,7 +32,8 @@ class IRDetector:
     pixel_size: float = 18.0 * u.um / u.pixel
 
     # Readout Properties
-    nreads: int = 4  # assumed number of non-destructive reads per integration %  I think we need a function here. Simulations required to build it.
+    nreads: int = 4  # assumed number of non-destructive reads per integration
+    # I think we need a function here. Simulations required to build it.
 
     # We will need these details to calculate sensitivity functions, PRFs...etc
     _Optics = Optics()
@@ -108,7 +111,7 @@ class IRDetector:
 
         """
         # Use self._Optics to get access to the telescope parameters
-        return qe(wavelength) * 0.75
+        return self.qe(wavelength) * 0.75
 
     def PRF(self) -> object:
         """Uses the PSF from the `Optics` class to make a PRF object

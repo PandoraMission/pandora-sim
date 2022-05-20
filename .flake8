@@ -4,3 +4,5 @@ max-complexity = 14
 count = True
 show-source = True
 extend-ignore = E203, E741
+per-file-ignores =
+    src/pandorasat/citations.py:E501
