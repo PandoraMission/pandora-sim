@@ -1,11 +1,13 @@
 """Holds metadata and methods on Pandora"""
 
 from dataclasses import dataclass
-
+import pandas as pd
 from .irdetector import IRDetector
 from .optics import Optics
 from .orbit import Orbit
 from .visibledetector import VisibleDetector
+from . import PACKAGEDIR
+import numpy as np
 
 
 @dataclass
@@ -23,6 +25,7 @@ class PandoraSat:
     Optics = Optics()
     NIRDA = IRDetector()
     VISDA = VisibleDetector()
+    targetlist = pd.read_csv(f"{PACKAGEDIR}/data/targets.csv")
 
     def __repr__(self):
         return "Pandora Sat"
