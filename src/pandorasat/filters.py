@@ -8,12 +8,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from astropy.constants import c, h
 from astropy.io import votable
-from astropy.modeling import models
-from astropy.utils.data import download_file
 
 from . import PACKAGEDIR
 
-# Filters bundled with package
+# Throughputs bundled with package
 filter_fnames = np.sort(glob(f"{PACKAGEDIR}/data/*.xml"))
 filter_dict = {
     "_".join([filter.split("/")[-1].split(".")[idx] for idx in [0, 2]]): filter
@@ -33,7 +31,7 @@ zeropoints = {
 
 
 @dataclass
-class Filter(object):
+class Throughput(object):
     name: str
 
     def __post_init__(self):
@@ -156,114 +154,6 @@ def wavelength_to_rgb(wavelength, gamma=0.8):
     G *= 255
     B *= 255
     return np.asarray((int(R), int(G), int(B))) / 256
-
-
-@dataclass
-class Target(object):
-    name: str
-    radius: int = 3
-
-    def __post_init__(self):
-        url = f"https://vizier.cds.unistra.fr/viz-bin/sed?-c={self.name.replace(' ', '%20')}&-c.rs={self.radius}"
-        df = (
-            votable.parse(download_file(url)).get_first_table().to_table()
-        )  # .to_pandas()
-        wavelength = (c / (np.asarray(df["sed_freq"]) * u.GHz)).to(u.angstrom)
-        wavelength = (c / (np.asarray(df["sed_freq"]) * u.GHz)).to(u.angstrom)
-        sed_flux = np.asarray(df["sed_flux"]) * u.jansky
-        sed_flux = sed_flux.to(
-            u.erg / u.cm**2 / u.s / u.angstrom,
-            equivalencies=u.spectral_density(wavelength),
-        )
-        sed_flux_err = np.asarray(df["sed_eflux"]) * u.jansky
-        sed_flux_err = sed_flux_err.to(
-            u.erg / u.cm**2 / u.s / u.angstrom,
-            equivalencies=u.spectral_density(wavelength),
-        )
-        k = np.isfinite(sed_flux_err)
-        k &= sed_flux_err != 0
-        k &= (df["sed_eflux"].data / df["sed_flux"]) < 0.1
-        s = np.argsort(wavelength[k])
-        self.wavelength, self._spectrum, self._spectrum_err = (
-            wavelength[k][s],
-            sed_flux[k][s],
-            sed_flux_err[k][s],
-        )
-        self.ra, self.dec = df["_RAJ2000"].data.mean(), df["_DEJ2000"].data.mean()
-        self.fit()
-
-    def __repr__(self):
-        return f"Target {self.name}"
-
-    def plot_spectrum(self):
-        wave_high = (
-            np.linspace(
-                self.wavelength.min().value * 0.9,
-                self.wavelength.max().value * 1.5,
-                1000,
-            )
-            * u.angstrom
-        )
-        bb_model = self.spectrum(wave_high)
-        with plt.style.context("seaborn-white"):
-            fig = plt.figure()
-            plt.errorbar(
-                self.wavelength,
-                self._spectrum,
-                self._spectrum_err,
-                ls="",
-                marker=".",
-                c="k",
-            )
-            plt.xlabel(f"Wavelength {self.wavelength.unit._repr_latex_()}")
-            plt.ylabel(f"Spectrum {self._spectrum.unit._repr_latex_()}")
-            plt.yscale("log")
-            plt.xscale("log")
-            plt.title(f"{self.name} Spectrum")
-
-            plt.plot(wave_high, bb_model, c="r")
-            plt.yscale("log")
-            plt.xscale("log")
-        return fig
-
-    def fit(self):
-        bb_data = (
-            self._spectrum.to(
-                u.erg / (u.Hz * u.s * u.cm**2),
-                equivalencies=u.spectral_density(self.wavelength),
-            )
-            / u.sr
-        )
-        # bb_error = (
-        #     self._spectrum_err.to(
-        #         u.erg / (u.Hz * u.s * u.cm**2),
-        #         equivalencies=u.spectral_density(self.wavelength),
-        #     )
-        #     / u.sr
-        # )
-
-        temperatures = np.linspace(1000, 10000, 100)
-        chi2 = np.zeros_like(temperatures)
-        for count in range(4):
-            for idx, temperature in enumerate(temperatures):
-                bb = models.BlackBody(temperature=temperature * u.K)
-                bb_model = bb(self.wavelength)
-                bb_model = bb_model * np.mean(bb_data / bb_model)
-                chi2[idx] = np.nansum((bb_data - bb_model).value ** 2)
-            t = temperatures[np.argmin(chi2)]
-            temperatures = (temperatures - t) * 0.5 + t
-
-        self.bestfit_temperature = temperatures[np.argmin(chi2)] * u.K
-        self._blackbody = models.BlackBody(temperature=self.bestfit_temperature)
-        bb_model = (self._blackbody(self.wavelength) * u.sr).to(
-            self._spectrum.unit, equivalencies=u.spectral_density(self.wavelength)
-        )
-        self._corr = np.nanmean(self._spectrum / bb_model)
-
-    def spectrum(self, wavelength):
-        return (self._blackbody(wavelength) * u.sr).to(
-            self._spectrum.unit, equivalencies=u.spectral_density(wavelength)
-        ) * self._corr
 
 
 def load_vega():

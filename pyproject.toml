@@ -5,10 +5,11 @@ description = ""
 authors = ["Christina Hedges <christina.l.hedges@nasa.gov>"]
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = ">=3.8,<3.11"
 numpy = "^1.22.3"
 astropy = "^5.0.4"
 pandas = "^1.4.2"
+scipy = "^1.8.1"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
