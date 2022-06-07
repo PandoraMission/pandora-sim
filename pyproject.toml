@@ -10,6 +10,7 @@ numpy = "^1.22.3"
 astropy = "^5.0.4"
 pandas = "^1.4.2"
 scipy = "^1.8.1"
+tqdm = "^4.64.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
@@ -24,6 +25,7 @@ mkdocs-jupyter = "^0.20.1"
 pytkdocs = "^0.16.1"
 matplotlib = "^3.5.2"
 lxml = "^4.8.0"
+line-profiler = "^3.5.1"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
