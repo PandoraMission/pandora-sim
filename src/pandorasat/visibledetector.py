@@ -8,7 +8,7 @@ from scipy import interpolate
 from . import PACKAGEDIR
 from tqdm import tqdm
 
-from astropy.convolution import convolve, Gaussian1DKernel
+from astropy.convolution import convolve, Gaussian1DKernel, Gaussian2DKernel
 
 
 @dataclass
@@ -61,20 +61,31 @@ class VisibleDetector:
         )
         return jitter_x, jitter_y
 
-    def _get_psf(self):
+    def _get_psf(self, std=0.5 * u.pix):
+        """
+
+        Parameters
+        ----------
+        std: float
+            The standard deviation of the high frequency jitter noise to convolve with PSF
+        """
         data = loadmat(f"{PACKAGEDIR}/data/Pandora_vis_20210602.mat")
         psf = data["psf"]
         # This is from Tom, I'm assuming the units are pixels, should check with him
         x = np.arange(-256, 257) * np.ravel(data["dx"]) / 6.5 * u.pixel
         y = np.arange(-256, 257) * np.ravel(data["dx"]) / 6.5 * u.pixel
+        kernel = Gaussian2DKernel(
+            np.median((std) / np.diff(x)).value, np.median((std) / np.diff(y))
+        )
+        psf = convolve(psf, kernel)
 
         # Tom thinks this step shoudl be done later when it's at the "science" level...
         psf /= np.trapz(np.trapz(psf, x.value, axis=1), y.value)
 
-        xnew = np.arange(-33.5, 33.5, 0.04)
-        ynew = np.arange(-33.5, 33.5, 0.04)
-        f = interpolate.interp2d(x, y, np.log(psf), kind="cubic")
-        psf = np.exp(f(xnew, ynew))
+        # xnew = np.arange(-33.5, 33.5, 0.04)
+        # ynew = np.arange(-33.5, 33.5, 0.04)
+        # f = interpolate.interp2d(x, y, np.log(psf), kind="cubic")
+        # psf = np.exp(f(xnew, ynew))
 
         # This should be convolved with a Gaussian for high frequency noise.
 
@@ -85,8 +96,8 @@ class VisibleDetector:
         psf_cube = psf[:, :, None] + (dx[:, :, None] * w) + (dy[:, :, None] * w)
         psf_cube[psf_cube <= 0] = data["psf"].min()
         self.psf_x, self.psf_y, self.psf_wavelength, self.psf = (
-            xnew * u.pixel,
-            ynew * u.pixel,
+            x,
+            y,
             wavelength,
             psf_cube,
         )
@@ -162,12 +173,7 @@ class VisibleDetector:
             )
         )
 
-        for tdx, x, y, prf in tqdm(
-            zip(range(len(xs)), xs, ys, prfs),
-            position=0,
-            leave=True,
-            total=nsubtimes * ncadences,
-        ):
+        for tdx, x, y, prf in zip(range(len(xs)), xs, ys, prfs):
             X, Y = np.asarray(np.meshgrid(x - xmin, y - ymin))
             res[X, Y, np.floor(tdx / nsubtimes).astype(int)] += prf
         res /= len(prfs)
