@@ -6,6 +6,7 @@ import numpy as np
 from scipy.io import loadmat
 from scipy import interpolate
 from . import PACKAGEDIR
+from tqdm import tqdm
 
 from astropy.convolution import convolve, Gaussian1DKernel
 
@@ -38,21 +39,21 @@ class VisibleDetector:
         """
         raise NotImplementedError
 
-    def jitter(self, xstd=4, ystd=1.5, tstd=3, ntimes=50, seed=42):
+    def jitter(self, xstd=4, ystd=1.5, tstd=3, nsubtimes=50, seed=42):
         """Returns the jitter inside a cadence
 
         This is a dumb placeholder function.
         """
         np.random.seed(seed)
         jitter_x = (
-            convolve(np.random.normal(0, xstd, size=ntimes), Gaussian1DKernel(tstd))
+            convolve(np.random.normal(0, xstd, size=nsubtimes), Gaussian1DKernel(tstd))
             * tstd ** 0.5
             * xstd ** 0.5
         )
         np.random.seed(seed + 1)
         jitter_y = (
             convolve(
-                np.random.normal(0, ystd, size=ntimes),
+                np.random.normal(0, ystd, size=nsubtimes),
                 Gaussian1DKernel(tstd),
             )
             * tstd ** 0.5
@@ -114,7 +115,16 @@ class VisibleDetector:
         )[None, None, :]
         return xbin.astype(int), ybin.astype(int), psf2
 
-    def prf(self, center=(0, 0), seed=42, xstd=4.5, ystd=1, tstd=3, ntimes=50):
+    def prf(
+        self,
+        center=(0, 0),
+        seed=42,
+        xstd=4.5,
+        ystd=1,
+        tstd=3,
+        exptime=10 * u.second,
+        obs_duration=30 * u.second,
+    ):
         """
         Make a Pixel Response Function
 
@@ -128,12 +138,13 @@ class VisibleDetector:
             Width of Gaussian convolution in the time dimension. Higher
             values will give longer time correlations in jitter.
         """
+        nsubtimes = np.ceil((exptime / (0.2 * u.second)).value).astype(int)
+        ncadences = np.ceil((obs_duration / exptime).value).astype(int)
         jitter_x, jitter_y = self.jitter(
-            ntimes=ntimes, xstd=xstd, ystd=ystd, tstd=tstd, seed=seed
+            nsubtimes=nsubtimes * ncadences, xstd=xstd, ystd=ystd, tstd=tstd, seed=seed
         )
         jitter_x += center[0]
         jitter_y += center[1]
-
         xs, ys, prfs = [], [], []
         for jx, jy in zip(jitter_x, jitter_y):
             x, y, prf = self._bin_prf(center=(jx, jy))
@@ -146,21 +157,28 @@ class VisibleDetector:
             (
                 np.hstack(xs).max() - xmin + 1,
                 np.hstack(ys).max() - ymin + 1,
+                ncadences,
                 *prfs[0].shape[2:],
             )
         )
 
-        for x, y, prf in zip(xs, ys, prfs):
+        for tdx, x, y, prf in tqdm(
+            zip(range(len(xs)), xs, ys, prfs),
+            position=0,
+            leave=True,
+            total=nsubtimes * ncadences,
+        ):
             X, Y = np.asarray(np.meshgrid(x - xmin, y - ymin))
-            res[X, Y] += prf
+            res[X, Y, np.floor(tdx / nsubtimes).astype(int)] += prf
         res /= len(prfs)
         x, y = (
             np.arange(np.hstack(xs).max() - xmin + 1) + xmin,
             np.arange(np.hstack(ys).max() - ymin + 1) + ymin,
         )
-        res /= np.asarray([np.sum(res[:, :, idx]) for idx in range(res.shape[2])])[
-            None, None, :
-        ]
+
+        res /= np.asarray(
+            [np.sum(res[:, :, idx], axis=(0, 1)) for idx in range(res.shape[2])]
+        )[None, None, :]
         return (
             x,
             y,
