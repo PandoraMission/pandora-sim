@@ -15,7 +15,7 @@ class Optics:
         mirror_diameter (float): Diameter of the Pandora mirror
     """
 
-    mirror_diameter: float = 0.3 * u.m
+    mirror_diameter: float = 0.43 * u.m
 
     def __repr__(self):
         return "Pandora Optics"
