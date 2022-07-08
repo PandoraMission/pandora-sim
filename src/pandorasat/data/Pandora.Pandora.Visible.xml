@@ -8,6 +8,10 @@
    <FIELD ID="Transmission" datatype="double" name="Transmission"/>
    <DATA>
     <TABLEDATA>
+      <TR>
+       <TD>2978.5</TD>
+       <TD>0.00</TD>
+      </TR>
      <TR>
       <TD>2978.7964944162736</TD>
       <TD>0.004468318113115117</TD>
