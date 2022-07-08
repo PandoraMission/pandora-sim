@@ -68,9 +68,9 @@ class Throughput(object):
             self.wavelength.value,
             self._transmission,
         )
-        zeropoint = np.trapz(
-            wavelength * spectrum * transmission, wavelength
-        ) / np.trapz(wavelength * transmission, wavelength)
+        zeropoint = np.trapz(spectrum * transmission, wavelength) / np.trapz(
+            transmission, wavelength
+        )
         return zeropoint
 
     def mag_from_flux(self, flux):
