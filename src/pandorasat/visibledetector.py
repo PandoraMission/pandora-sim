@@ -6,6 +6,9 @@ import numpy as np
 from scipy.io import loadmat
 from scipy import interpolate
 from . import PACKAGEDIR
+from .filters import Throughput
+from .utils import photon_energy
+from .optics import Optics
 from tqdm import tqdm
 
 from astropy.convolution import convolve, Gaussian1DKernel, Gaussian2DKernel
@@ -20,6 +23,7 @@ class VisibleDetector:
     npix_row: int = 2048 * u.pixel
     pixel_scale: float = 0.78 * u.arcsec / u.pixel
     pixel_size: float = 6.5 * u.um / u.pixel
+    gain: float = 2.0 * u.electron / u.DN
 
     def __post_init__(self):
         self._get_psf()
@@ -37,7 +41,7 @@ class VisibleDetector:
         Returns:
             qe (npt.NDArray): Array of the quantum efficiency of the detector
         """
-        raise NotImplementedError
+        return wavelength.value**0 * 0.7 * u.DN / u.photon
 
     def jitter(self, xstd=4, ystd=1.5, tstd=3, nsubtimes=50, seed=42):
         """Returns the jitter inside a cadence
@@ -47,8 +51,8 @@ class VisibleDetector:
         np.random.seed(seed)
         jitter_x = (
             convolve(np.random.normal(0, xstd, size=nsubtimes), Gaussian1DKernel(tstd))
-            * tstd ** 0.5
-            * xstd ** 0.5
+            * tstd**0.5
+            * xstd**0.5
         )
         np.random.seed(seed + 1)
         jitter_y = (
@@ -56,8 +60,8 @@ class VisibleDetector:
                 np.random.normal(0, ystd, size=nsubtimes),
                 Gaussian1DKernel(tstd),
             )
-            * tstd ** 0.5
-            * ystd ** 0.5
+            * tstd**0.5
+            * ystd**0.5
         )
         return jitter_x, jitter_y
 
@@ -125,6 +129,24 @@ class VisibleDetector:
             ]
         )[None, None, :]
         return xbin.astype(int), ybin.astype(int), psf2
+
+    def throughput(self, wavelength):
+        return Throughput("Pandora_Visible").transmission(wavelength)
+
+    def sensitivity(self, wavelength):
+        sed = 1 * u.erg / u.s / u.cm**2 / u.angstrom
+        E = photon_energy(wavelength)
+        telescope_area = np.pi * (Optics.mirror_diameter / 2) ** 2
+        photon_flux_density = (
+            (telescope_area * sed * self.throughput(wavelength) / E).to(
+                u.photon / u.second / u.angstrom
+            )
+            * self.qe(wavelength)
+            * self.gain
+        )
+        photon_flux = photon_flux_density * np.gradient(wavelength)
+        sensitivity = photon_flux / sed
+        return sensitivity
 
     def prf(
         self,

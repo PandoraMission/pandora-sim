@@ -3,10 +3,17 @@
 from dataclasses import dataclass
 
 import astropy.units as u
+
 import numpy as np
 from numpy import typing as npt
+from scipy.io import loadmat
+from . import PACKAGEDIR
 
 from .optics import Optics
+from .filters import Throughput
+from .utils import photon_energy
+
+from astropy.convolution import convolve, Gaussian1DKernel, Gaussian2DKernel
 
 
 @dataclass
@@ -25,7 +32,7 @@ class IRDetector:
     # Detector Properties
     darkcurrent_T110K: float = 1.0 * u.electron / u.second / u.pixel
     thermal_var: float = 5 * u.mK
-    gain: float = 2.7 * u.electron / u.DN
+    gain: float = 2.0 * u.electron / u.DN
     npix_column: int = 2048 * u.pixel
     npix_row: int = 2048 * u.pixel
     pixel_scale: float = 1.19 * u.arcsec / u.pixel
@@ -37,6 +44,41 @@ class IRDetector:
 
     # We will need these details to calculate sensitivity functions, PRFs...etc
     _Optics = Optics()
+
+    def __post_init__(self):
+        self._get_psf()
+
+    def _get_psf(self, std=0.5 * u.pix):
+        """
+
+        Parameters
+        ----------
+        std: float
+            The standard deviation of the high frequency jitter noise to convolve with PSF
+        """
+        data = loadmat(f"{PACKAGEDIR}/data/Pandora_nir_20210602.mat")
+        psf = data["psf"]
+        # This is from Tom, I'm assuming the units are pixels, should check with him
+        x = np.arange(-256, 257) * np.ravel(data["dx"]) / 18 * u.pixel
+        y = np.arange(-256, 257) * np.ravel(data["dx"]) / 18 * u.pixel
+        kernel = Gaussian2DKernel(
+            np.median((std) / np.diff(x)).value, np.median((std) / np.diff(y))
+        )
+        psf = convolve(psf, kernel)
+
+        # Tom thinks this step should be done later when it's at the "science" level...
+        psf /= np.trapz(np.trapz(psf, x.value, axis=1), y.value)
+
+        # xnew = np.arange(-33.5, 33.5, 0.04)
+        # ynew = np.arange(-33.5, 33.5, 0.04)
+        # f = interpolate.interp2d(x, y, np.log(psf), kind="cubic")
+        # psf = np.exp(f(xnew, ynew))
+
+        self.psf_x, self.psf_y, self.psf = (
+            x,
+            y,
+            psf,
+        )
 
     def __repr__(self):
         return "Pandora IR Detector"
@@ -83,8 +125,8 @@ class IRDetector:
             ),
             sw_qe,
         )
-
-        return sw_qe * u.dimensionless_unscaled
+        sw_qe[sw_qe < 1e-5] = 0
+        return sw_qe * u.DN / u.photon
 
     def counts_from_jmag(self, jmag: float) -> float:
         """Calculates the counts from a target based on j magnitude
@@ -98,20 +140,23 @@ class IRDetector:
         # NOTE: If counts is > than some limit this should raise a warning to the user.
         raise NotImplementedError
 
-    def sensitivity(self, wavelength: npt.NDArray) -> npt.NDArray:
-        """
-        Calculate the detector sensitivity as a function of wavelength, encorporating
-        the properties of the optics of the telescope
+    def throughput(self, wavelength):
+        return wavelength.value**0 * 0.7
 
-        Parameters:
-            wavelength (npt.NDArray): Wavelength in microns as `astropy.unit`
-
-        Returns:
-            sensitivity (npt.NDArray): Array of the sensitivity of the detector as a function of wavelength
-
-        """
-        # Use self._Optics to get access to the telescope parameters
-        return self.qe(wavelength) * 0.75
+    def sensitivity(self, wavelength):
+        sed = 1 * u.erg / u.s / u.cm**2 / u.angstrom
+        E = photon_energy(wavelength)
+        telescope_area = np.pi * (Optics.mirror_diameter / 2) ** 2
+        photon_flux_density = (
+            (telescope_area * sed * self.throughput(wavelength) / E).to(
+                u.photon / u.second / u.angstrom
+            )
+            * self.qe(wavelength)
+            * self.gain
+        )
+        photon_flux = photon_flux_density * np.gradient(wavelength)
+        sensitivity = photon_flux / sed
+        return sensitivity
 
     def PRF(self) -> object:
         """Uses the PSF from the `Optics` class to make a PRF object
