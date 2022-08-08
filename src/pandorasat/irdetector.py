@@ -1,87 +1,17 @@
 """Holds metadata and methods on Pandora NIRDA"""
 
-from dataclasses import dataclass
-
 import astropy.units as u
-
 import numpy as np
-from numpy import typing as npt
-from scipy.io import loadmat
+import pandas as pd
+from tqdm import tqdm
+
 from . import PACKAGEDIR
-
-from .optics import Optics
-from .filters import Throughput
-from .utils import photon_energy
-
-from astropy.convolution import convolve, Gaussian1DKernel, Gaussian2DKernel
+from .detector import Detector
 
 
-@dataclass
-class IRDetector:
-    """Holds information on the IR Detector
-
-    Args:
-        darkcurrent_T110K (float): Detector dark current at 110K
-        gain (float): Gain of the NIRDA in electrons/DN per PANDORA_JWST_NIRCam_detector_parts.pdf
-        thermal_var (float): RMS of detector thermal variation in mK
-        npix_column (int): Number of pixels for NIRDA in column dimension
-        npix_row (int): Number of pixels for NIRDA in row dimension
-        nreads (int): Number of reads up the ramp
-    """
-
-    # Detector Properties
-    darkcurrent_T110K: float = 1.0 * u.electron / u.second / u.pixel
-    thermal_var: float = 5 * u.mK
-    gain: float = 2.0 * u.electron / u.DN
-    npix_column: int = 2048 * u.pixel
-    npix_row: int = 2048 * u.pixel
-    pixel_scale: float = 1.19 * u.arcsec / u.pixel
-    pixel_size: float = 18.0 * u.um / u.pixel
-
-    # Readout Properties
-    nreads: int = 4  # assumed number of non-destructive reads per integration
-    # I think we need a function here. Simulations required to build it.
-
-    # We will need these details to calculate sensitivity functions, PRFs...etc
-    _Optics = Optics()
-
-    def __post_init__(self):
-        self._get_psf()
-
-    def _get_psf(self, std=0.5 * u.pix):
-        """
-
-        Parameters
-        ----------
-        std: float
-            The standard deviation of the high frequency jitter noise to convolve with PSF
-        """
-        data = loadmat(f"{PACKAGEDIR}/data/Pandora_nir_20210602.mat")
-        psf = data["psf"]
-        # This is from Tom, I'm assuming the units are pixels, should check with him
-        x = np.arange(-256, 257) * np.ravel(data["dx"]) / 18 * u.pixel
-        y = np.arange(-256, 257) * np.ravel(data["dx"]) / 18 * u.pixel
-        kernel = Gaussian2DKernel(
-            np.median((std) / np.diff(x)).value, np.median((std) / np.diff(y))
-        )
-        psf = convolve(psf, kernel)
-
-        # Tom thinks this step should be done later when it's at the "science" level...
-        psf /= np.trapz(np.trapz(psf, x.value, axis=1), y.value)
-
-        # xnew = np.arange(-33.5, 33.5, 0.04)
-        # ynew = np.arange(-33.5, 33.5, 0.04)
-        # f = interpolate.interp2d(x, y, np.log(psf), kind="cubic")
-        # psf = np.exp(f(xnew, ynew))
-
-        self.psf_x, self.psf_y, self.psf = (
-            x,
-            y,
-            psf,
-        )
-
-    def __repr__(self):
-        return "Pandora IR Detector"
+class NIRDetector(Detector):
+    def throughput(self, wavelength):
+        return wavelength.value**0 * 0.714
 
     def qe(self, wavelength):
         """
@@ -101,64 +31,86 @@ class IRDetector:
         sw_exponential = 100.0
         sw_wavecut_red = 1.69  # changed from 2.38 for Pandora
         sw_wavecut_blue = 0.75  # new for Pandora
+        with np.errstate(invalid="ignore", over="ignore"):
+            sw_qe = (
+                sw_coeffs[0]
+                + sw_coeffs[1] * wavelength.to(u.micron).value
+                + sw_coeffs[2] * wavelength.to(u.micron).value ** 2
+                + sw_coeffs[3] * wavelength.to(u.micron).value ** 3
+            )
 
-        sw_qe = (
-            sw_coeffs[0]
-            + sw_coeffs[1] * wavelength.to(u.micron).value
-            + sw_coeffs[2] * wavelength.to(u.micron).value ** 2
-            + sw_coeffs[3] * wavelength.to(u.micron).value ** 3
-        )
+            sw_qe = np.where(
+                wavelength.to(u.micron).value > sw_wavecut_red,
+                sw_qe
+                * np.exp(
+                    (sw_wavecut_red - wavelength.to(u.micron).value) * sw_exponential
+                ),
+                sw_qe,
+            )
 
-        sw_qe = np.where(
-            wavelength.to(u.micron).value > sw_wavecut_red,
-            sw_qe
-            * np.exp((sw_wavecut_red - wavelength.to(u.micron).value) * sw_exponential),
-            sw_qe,
-        )
-
-        sw_qe = np.where(
-            wavelength.to(u.micron).value < sw_wavecut_blue,
-            sw_qe
-            * np.exp(
-                -(sw_wavecut_blue - wavelength.to(u.micron).value)
-                * (sw_exponential / 1.5)
-            ),
-            sw_qe,
-        )
+            sw_qe = np.where(
+                wavelength.to(u.micron).value < sw_wavecut_blue,
+                sw_qe
+                * np.exp(
+                    -(sw_wavecut_blue - wavelength.to(u.micron).value)
+                    * (sw_exponential / 1.5)
+                ),
+                sw_qe,
+            )
         sw_qe[sw_qe < 1e-5] = 0
         return sw_qe * u.DN / u.photon
 
-    def counts_from_jmag(self, jmag: float) -> float:
-        """Calculates the counts from a target based on j magnitude
-
-        Parameters:
-            jmag (float): j band magnitude
-
-        Returns:
-            counts (float): Recorded detector counts
-        """
-        # NOTE: If counts is > than some limit this should raise a warning to the user.
-        raise NotImplementedError
-
-    def throughput(self, wavelength):
-        return wavelength.value**0 * 0.7
-
-    def sensitivity(self, wavelength):
-        sed = 1 * u.erg / u.s / u.cm**2 / u.angstrom
-        E = photon_energy(wavelength)
-        telescope_area = np.pi * (Optics.mirror_diameter / 2) ** 2
-        photon_flux_density = (
-            (telescope_area * sed * self.throughput(wavelength) / E).to(
-                u.photon / u.second / u.angstrom
-            )
-            * self.qe(wavelength)
-            * self.gain
+    def wavelength_dispersion(self, pixel):
+        df = pd.read_csv(f"{PACKAGEDIR}/data/pixel_vs_wavelength.csv")
+        return (
+            np.interp(pixel, df.Pixel, df.Wavelength, left=np.nan, right=np.nan)
+            * u.micron
         )
-        photon_flux = photon_flux_density * np.gradient(wavelength)
-        sensitivity = photon_flux / sed
-        return sensitivity
 
-    def PRF(self) -> object:
-        """Uses the PSF from the `Optics` class to make a PRF object
-        Should returns a PRF object that has plot and downsample methods."""
-        raise NotImplementedError
+    def get_trace(
+        self,
+        target,
+        pixel_resolution=2,
+        subarray_size=(40, 300),
+        target_center=(20, 200),
+    ):
+        """Calculates the electrons per second from a source in a subarray"""
+        dp = 1 / pixel_resolution
+        pix = np.arange(-200, 100, dp) + dp / 2
+        wav = self.wavelength_dispersion(pix)
+        ar = np.zeros(subarray_size)
+        yc, xc = target_center
+
+        wavelength = np.linspace(0.1, 2, 2000) * u.micron
+        sed = target.model_spectrum(wavelength)
+        sensitivity = self.sensitivity(wavelength)
+
+        pix_edges = np.vstack([pix - dp / 2, pix + dp / 2]).T
+        wav_edges = self.wavelength_dispersion(pix_edges)
+        # Iterate every pixel, integrate the SED
+        for pdx in tqdm(range(len(pix))):
+            # Find the value in each pixel
+            k = (wavelength > wav_edges[pdx][0]) & (wavelength < wav_edges[pdx][1])
+            wp = np.hstack(
+                [
+                    wav_edges[pdx][0] + 1e-10 * u.AA,
+                    wavelength[k],
+                    wav_edges[pdx][1] - 1e-10 * u.AA,
+                ]
+            )
+            sp = np.interp(wp, wavelength, sed * sensitivity)
+            integral = (
+                np.trapz(
+                    np.hstack([0, sp, 0]),
+                    np.hstack([wav_edges[pdx][0], wp, wav_edges[pdx][1]]),
+                )
+            ).to(u.electron / u.s)
+
+            # Build the PRF at this wavelength
+            x, y, prf = self._bin_prf(wavelength=wav[pdx], center=(pix[pdx], 0))
+            # Assign to each pixel
+            X, Y = np.meshgrid(x + xc, y + yc)
+            k = (X > 0) & (Y > 0) & (X < ar.shape[1]) & (Y < ar.shape[0])
+            ar[Y[k], X[k]] += np.nan_to_num(prf[k] * integral.value)
+        ar *= u.electron / u.second
+        return ar

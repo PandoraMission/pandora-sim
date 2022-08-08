@@ -1,13 +1,15 @@
 """Holds metadata and methods on Pandora"""
 
 from dataclasses import dataclass
+
+import astropy.units as u
 import pandas as pd
-from .irdetector import IRDetector
+
+from . import PACKAGEDIR
+from .irdetector import NIRDetector
 from .optics import Optics
 from .orbit import Orbit
 from .visibledetector import VisibleDetector
-from . import PACKAGEDIR
-import numpy as np
 
 
 @dataclass
@@ -23,8 +25,15 @@ class PandoraSat:
 
     Orbit = Orbit()
     Optics = Optics()
-    NIRDA = IRDetector()
-    VISDA = VisibleDetector()
+    NIRDA = NIRDetector(
+        "NIR", 1.19 * u.arcsec / u.pixel, 18.0 * u.um / u.pixel, 2.0 * u.electron / u.DN
+    )
+    VISDA = VisibleDetector(
+        "Visible",
+        0.78 * u.arcsec / u.pixel,
+        6.5 * u.um / u.pixel,
+        2.0 * u.electron / u.DN,
+    )
     targetlist = pd.read_csv(f"{PACKAGEDIR}/data/targets.csv")
 
     def __repr__(self):
