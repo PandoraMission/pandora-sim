@@ -1,21 +1,35 @@
-"""Generic Detector class..."""
+"""Generic Detector class"""
 
 import abc
 from dataclasses import dataclass
 
 import astropy.units as u
 import numpy as np
-from astropy.convolution import Gaussian1DKernel, Gaussian2DKernel, convolve
+from astropy.convolution import Gaussian2DKernel, convolve
 from astropy.io import fits
 
 from . import PACKAGEDIR
 from .optics import Optics
-from .utils import load_vega, photon_energy
+from .utils import get_jitter, load_vega, photon_energy
 
 
 @dataclass
 class Detector(abc.ABC):
-    """Holds information on the Visible Detector"""
+    """Holds information on a Detector
+
+    Attributes
+    ----------
+
+    name: str
+        Name of the detector. This will determine which files are loaded, choose
+        from `"visda"` or `"nirda"`
+    pixel_scale: float
+        The pixel scale of the detector in arcseconds/pixel
+    pixel_size: float
+        The pixel size in microns/mm
+    gain: float, optional
+        The gain in electrons per data unit
+    """
 
     # Detector Properties
     name: str
@@ -50,11 +64,18 @@ class Detector(abc.ABC):
 
     def _get_psf(self, std=0 * u.pix):
         """
+        Obtain PSF from a fits file.
+
+        Note the PSF cube should have structure (x pixel, y pixel, wavelength)
+
+        If `std` is not 0, will convolve the PSF with a Gaussian to simulate
+        high frequency noise. `std` specifies the width of the Gaussian in pixels.
 
         Parameters
         ----------
         std: float
-            The standard deviation of the high frequency jitter noise to convolve with PSF
+            The standard deviation of the high frequency jitter noise to convolve with PSF.
+
         """
 
         hdu = fits.open(self.psf_fname)
@@ -86,6 +107,9 @@ class Detector(abc.ABC):
         )
 
     def _bin_prf(self, wavelength, center=(0, 0)):
+        """
+        Bins the PSF down to the pixel scale.
+        """
         mod = (self.psf_x.value + center[0]) % 1
         cyc = (self.psf_x.value + center[0]) - mod
         xbin = np.unique(cyc)
@@ -105,28 +129,6 @@ class Detector(abc.ABC):
         psf2 /= np.trapz(np.trapz(psf2, xbin, axis=1), ybin)
 
         return xbin.astype(int), ybin.astype(int), psf2
-
-    def _jitter(self, xstd=4, ystd=1.5, tstd=3, nsubtimes=50, seed=42):
-        """Returns the jitter inside a cadence
-
-        This is a dumb placeholder function.
-        """
-        np.random.seed(seed)
-        jitter_x = (
-            convolve(np.random.normal(0, xstd, size=nsubtimes), Gaussian1DKernel(tstd))
-            * tstd**0.5
-            * xstd**0.5
-        )
-        np.random.seed(seed + 1)
-        jitter_y = (
-            convolve(
-                np.random.normal(0, ystd, size=nsubtimes),
-                Gaussian1DKernel(tstd),
-            )
-            * tstd**0.5
-            * ystd**0.5
-        )
-        return jitter_x, jitter_y
 
     def throughput(self, wavelength):
         pass
@@ -171,7 +173,7 @@ class Detector(abc.ABC):
         """
         nsubtimes = np.ceil((exptime / (0.2 * u.second)).value).astype(int)
         ncadences = np.ceil((obs_duration / exptime).value).astype(int)
-        jitter_x, jitter_y = self._jitter(
+        jitter_x, jitter_y = get_jitter(
             nsubtimes=nsubtimes * ncadences, xstd=xstd, ystd=ystd, tstd=tstd, seed=seed
         )
         jitter_x += center[0]
@@ -213,10 +215,12 @@ class Detector(abc.ABC):
 
     @property
     def midpoint(self):
+        """Mid point of the sensitivity function"""
         w = np.arange(0.1, 3, 0.005) * u.micron
         return np.average(w, weights=self.sensitivity(w))
 
     def _estimate_zeropoint(self):
+        """Use Vega SED to estimate the zeropoint of the detector"""
         wavelength, spectrum = load_vega()
         sens = self.sensitivity(wavelength)
         zeropoint = np.trapz(spectrum * sens, wavelength) / np.trapz(sens, wavelength)
@@ -229,6 +233,7 @@ class Detector(abc.ABC):
         return self.zeropoint * 10 ** (-mag / 2.5)
 
     def psf(self, wavelength):
+        """Get the PSF at a certain wavelength, interpolated from self.psf_cube"""
         return interp_psf_cube(wavelength, self.psf_wavelength, self.psf_cube)
 
 
