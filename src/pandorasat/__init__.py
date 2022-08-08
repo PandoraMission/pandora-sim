@@ -4,5 +4,4 @@ import os  # noqa
 PACKAGEDIR = os.path.abspath(os.path.dirname(__file__))
 
 from .pandorasat import PandoraSat  # noqa
-from .filters import *
-from .targets import *
+from .targets import Target  # noqa

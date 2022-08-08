@@ -5,27 +5,24 @@ from dataclasses import dataclass
 import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
-from astropy.constants import c, h
+from astropy.constants import c
 from astropy.io import votable
 from astropy.modeling import models
 from astropy.utils.data import download_file
-
-from . import PACKAGEDIR
 
 
 @dataclass
 class Target(object):
     name: str
-    radius: int = 3
 
-    @property
-    def vizier_url(self):
-        return f"https://vizier.cds.unistra.fr/viz-bin/sed?-c={self.name.replace(' ', '%20')}&-c.rs={self.radius}"
-
-    def from_vizier(self):
+    def from_vizier(self, radius=2):
+        vizier_url = f"https://vizier.cds.unistra.fr/viz-bin/sed?-c={self.name.replace(' ', '%20')}&-c.rs={radius}"
         df = (
-            votable.parse(download_file(self.vizier_url)).get_first_table().to_table()
+            votable.parse(download_file(vizier_url)).get_first_table().to_table()
         )  # .to_pandas()
+        df = df[df["sed_flux"] / df["sed_eflux"] > 5]
+        if len(df) == 0:
+            raise ValueError("No valid photometry")
         wavelength = (c / (np.asarray(df["sed_freq"]) * u.GHz)).to(u.angstrom)
         wavelength = (c / (np.asarray(df["sed_freq"]) * u.GHz)).to(u.angstrom)
         sed_flux = np.asarray(df["sed_flux"]) * u.jansky

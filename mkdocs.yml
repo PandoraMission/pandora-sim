@@ -7,6 +7,8 @@ nav:
       - VISDA : visibledetector.md
       - Optics : optics.md
       - Orbit : orbit.md
+    - Notebooks:
+      - PandoraSat Demo: pandorasat-demo-1.ipynb
 theme:
   name: "material"
   icon:
@@ -15,7 +17,7 @@ repo_url: https://github.com/pandoramission/pandora-sat
 plugins:
   - search
   - mkdocs-jupyter:
-      execute: False
+      execute: True
       include_source: True
       ignore_h1_titles: False
   - mkdocstrings:
