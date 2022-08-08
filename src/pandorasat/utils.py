@@ -1,6 +1,7 @@
 import astropy.units as u
 import numpy as np
 from astropy.constants import c, h
+from astropy.convolution import Gaussian1DKernel, convolve
 
 from . import PACKAGEDIR
 
@@ -62,3 +63,26 @@ def wavelength_to_rgb(wavelength, gamma=0.8):
     G *= 255
     B *= 255
     return np.asarray((int(R), int(G), int(B))) / 256
+
+
+def get_jitter(xstd=4, ystd=1.5, tstd=3, nsubtimes=50, seed=42):
+    """Returns the jitter inside a cadence
+
+    This is a dumb placeholder function.
+    """
+    np.random.seed(seed)
+    jitter_x = (
+        convolve(np.random.normal(0, xstd, size=nsubtimes), Gaussian1DKernel(tstd))
+        * tstd**0.5
+        * xstd**0.5
+    )
+    np.random.seed(seed + 1)
+    jitter_y = (
+        convolve(
+            np.random.normal(0, ystd, size=nsubtimes),
+            Gaussian1DKernel(tstd),
+        )
+        * tstd**0.5
+        * ystd**0.5
+    )
+    return jitter_x, jitter_y

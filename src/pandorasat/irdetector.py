@@ -10,9 +10,6 @@ from .detector import Detector
 
 
 class NIRDetector(Detector):
-    def throughput(self, wavelength):
-        return wavelength.value**0 * 0.714
-
     def qe(self, wavelength):
         """
         Calculate the quantum efficiency of the detector from the JWST NIRCam models.
@@ -60,11 +57,35 @@ class NIRDetector(Detector):
         sw_qe[sw_qe < 1e-5] = 0
         return sw_qe * u.DN / u.photon
 
-    def wavelength_dispersion(self, pixel):
+    def throughput(self, wavelength):
+        return wavelength.value**0 * 0.714
+
+    def wavelength_to_pixel(self, wavelength):
+        if not hasattr(self, "_dispersion_df"):
+            self._dispersion_df = pd.read_csv(
+                f"{PACKAGEDIR}/data/pixel_vs_wavelength.csv"
+            )
+        df = self._dispersion_df
+        return np.interp(
+            wavelength,
+            np.asarray(df.Wavelength) * u.micron,
+            np.asarray(df.Pixel) * u.pixel,
+            left=np.nan,
+            right=np.nan,
+        )
+
+    def pixel_to_wavelength(self, pixel):
+        if not hasattr(self, "_dispersion_df"):
+            self._dispersion_df = pd.read_csv(
+                f"{PACKAGEDIR}/data/pixel_vs_wavelength.csv"
+            )
         df = pd.read_csv(f"{PACKAGEDIR}/data/pixel_vs_wavelength.csv")
-        return (
-            np.interp(pixel, df.Pixel, df.Wavelength, left=np.nan, right=np.nan)
-            * u.micron
+        return np.interp(
+            pixel,
+            np.asarray(df.Pixel) * u.pixel,
+            np.asarray(df.Wavelength) * u.micron,
+            left=np.nan,
+            right=np.nan,
         )
 
     def get_trace(
@@ -74,10 +95,23 @@ class NIRDetector(Detector):
         subarray_size=(40, 300),
         target_center=(20, 200),
     ):
-        """Calculates the electrons per second from a source in a subarray"""
+        """Calculates the electrons per second from a source in a subarray
+
+        Parameters
+        ----------
+        target: ps.target.Target
+            A target with the method to get an SED as a function of wavelength
+        pixel_resolution: float
+            The number of subpixels to use when building the trace.
+            Higher numbers will take longer to calculate.
+        subarray_size: Tuple
+            Size of the subarray to calculate
+        target_center: tuple
+            Center of the target within the subarray.
+        """
         dp = 1 / pixel_resolution
         pix = np.arange(-200, 100, dp) + dp / 2
-        wav = self.wavelength_dispersion(pix)
+        wav = self.pixel_to_wavelength(pix * u.pixel)
         ar = np.zeros(subarray_size)
         yc, xc = target_center
 
@@ -86,7 +120,7 @@ class NIRDetector(Detector):
         sensitivity = self.sensitivity(wavelength)
 
         pix_edges = np.vstack([pix - dp / 2, pix + dp / 2]).T
-        wav_edges = self.wavelength_dispersion(pix_edges)
+        wav_edges = self.pixel_to_wavelength(pix_edges * u.pixel)
         # Iterate every pixel, integrate the SED
         for pdx in tqdm(range(len(pix))):
             # Find the value in each pixel
