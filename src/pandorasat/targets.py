@@ -9,7 +9,15 @@ from astropy.constants import c
 from astropy.io import votable
 from astropy.modeling import models
 from astropy.utils.data import download_file
-
+import os
+from . import PACKAGEDIR
+phoenixpath = f"{PACKAGEDIR}/data/phoenix"
+os.environ["PYSYN_CDBS"] = phoenixpath
+import warnings
+with warnings.catch_warnings():
+    warnings.filterwarnings('ignore',
+        message="Extinction files not found in ")
+    import pysynphot
 
 @dataclass
 class Target(object):
@@ -48,9 +56,23 @@ class Target(object):
         self.fit()
         return self
 
-    @staticmethod
-    def from_phoenix(self):
-        raise ValueError
+    def from_phoenix(self, teff, logg, Jmag):
+        star = pysynphot.Icat("phoenix", teff, 0.0, logg)
+        star_norm = star.renorm(Jmag, "vegamag",
+            pysynphot.ObsBandpass("johnson,j"))
+        star_norm.convert("Micron")
+        star_norm.convert("flam")
+
+        mask = (star_norm.wave >= 0.1) * (star_norm.wave <= 3) 
+        wavelength = star_norm.wave[mask] * u.micron
+        wavelength = wavelength.to(u.angstrom)
+
+        sed = star_norm.flux[mask] * u.erg/u.s/u.cm**2/u.angstrom
+        self.wavelength, self.spectrum = wavelength, sed
+        self.phoenix_model = True
+        return self
+
+
 
     def __repr__(self):
         return f"Target {self.name}"
@@ -67,14 +89,22 @@ class Target(object):
         bb_model = self.model_spectrum(wave_high)
         with plt.style.context("seaborn-white"):
             fig = plt.figure()
-            plt.errorbar(
-                self.wavelength,
-                self.spectrum,
-                self.spectrum_err,
-                ls="",
-                marker=".",
-                c="k",
-            )
+            if hasattr(self, "spectrum_err"):
+                plt.errorbar(
+                    self.wavelength,
+                    self.spectrum,
+                    self.spectrum_err,
+                    ls="",
+                    marker=".",
+                    c="k",
+                )
+            else:
+                plt.plot(
+                    self.wavelength,
+                    self.spectrum,
+                    ls="-",
+                    c="k",
+                )
             plt.xlabel(f"Wavelength {self.wavelength.unit._repr_latex_()}")
             plt.ylabel(f"Spectrum {self.spectrum.unit._repr_latex_()}")
             plt.yscale("log")
@@ -121,6 +151,15 @@ class Target(object):
         self._corr = np.nanmean(self.spectrum / bb_model)
 
     def model_spectrum(self, wavelength):
-        return (self._blackbody(wavelength) * u.sr).to(
-            self.spectrum.unit, equivalencies=u.spectral_density(wavelength)
-        ) * self._corr
+        if hasattr(self, "phoenix_model"):
+            return np.interp(
+            wavelength,
+            self.wavelength,
+            self.spectrum,
+            left=np.nan,
+            right=np.nan,
+        )
+        else:
+            return (self._blackbody(wavelength) * u.sr).to(
+                self.spectrum.unit, equivalencies=u.spectral_density(wavelength)
+            ) * self._corr
