@@ -134,7 +134,7 @@ class Detector(abc.ABC):
         pass
 
     def sensitivity(self, wavelength):
-        sed = 1 * u.erg / u.s / u.cm**2 / u.angstrom
+        sed = 1 * u.erg / u.s / u.cm ** 2 / u.angstrom
         E = photon_energy(wavelength)
         telescope_area = np.pi * (Optics.mirror_diameter / 2) ** 2
         photon_flux_density = (
@@ -150,6 +150,7 @@ class Detector(abc.ABC):
 
     def prf(
         self,
+        wavelength,
         center=(0, 0),
         seed=42,
         xstd=4.5,
@@ -180,7 +181,7 @@ class Detector(abc.ABC):
         jitter_y += center[1]
         xs, ys, prfs = [], [], []
         for jx, jy in zip(jitter_x, jitter_y):
-            x, y, prf = self._bin_prf(center=(jx, jy))
+            x, y, prf = self._bin_prf(wavelength=wavelength, center=(jx, jy))
             xs.append(x)
             ys.append(y)
             prfs.append(prf)
