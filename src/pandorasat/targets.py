@@ -11,13 +11,17 @@ from astropy.modeling import models
 from astropy.utils.data import download_file
 import os
 from . import PACKAGEDIR
+from astroquery.vizier import Vizier
+
+
 phoenixpath = f"{PACKAGEDIR}/data/phoenix"
 os.environ["PYSYN_CDBS"] = phoenixpath
 import warnings
+
 with warnings.catch_warnings():
-    warnings.filterwarnings('ignore',
-        message="Extinction files not found in ")
+    warnings.filterwarnings("ignore", message="Extinction files not found in ")
     import pysynphot
+
 
 @dataclass
 class Target(object):
@@ -35,12 +39,12 @@ class Target(object):
         wavelength = (c / (np.asarray(df["sed_freq"]) * u.GHz)).to(u.angstrom)
         sed_flux = np.asarray(df["sed_flux"]) * u.jansky
         sed_flux = sed_flux.to(
-            u.erg / u.cm**2 / u.s / u.angstrom,
+            u.erg / u.cm ** 2 / u.s / u.angstrom,
             equivalencies=u.spectral_density(wavelength),
         )
         sed_flux_err = np.asarray(df["sed_eflux"]) * u.jansky
         sed_flux_err = sed_flux_err.to(
-            u.erg / u.cm**2 / u.s / u.angstrom,
+            u.erg / u.cm ** 2 / u.s / u.angstrom,
             equivalencies=u.spectral_density(wavelength),
         )
         k = np.isfinite(sed_flux_err)
@@ -54,25 +58,40 @@ class Target(object):
         )
         self.ra, self.dec = df["_RAJ2000"].data.mean(), df["_DEJ2000"].data.mean()
         self.fit()
+        self.model_type = "sed_fit"
         return self
 
-    def from_phoenix(self, teff, logg, Jmag):
+    def from_phoenix(self, teff=None, logg=None, Jmag=None):
+
+        # Get data from TIC
+        viz_dat = np.asarray(
+            Vizier(columns=["Teff", "logg", "Jmag"])
+            .query_object(self.name, catalog="IV/39/tic82", radius=0.1 * u.arcsecond)[
+                0
+            ]["Teff", "logg", "Jmag"]
+            .to_pandas()
+            .iloc[0]
+        )
+        if teff is None:
+            teff = viz_dat[0]
+        if logg is None:
+            logg = viz_dat[1]
+        if Jmag is None:
+            Jmag = viz_dat[2]
+
         star = pysynphot.Icat("phoenix", teff, 0.0, logg)
-        star_norm = star.renorm(Jmag, "vegamag",
-            pysynphot.ObsBandpass("johnson,j"))
+        star_norm = star.renorm(Jmag, "vegamag", pysynphot.ObsBandpass("johnson,j"))
         star_norm.convert("Micron")
         star_norm.convert("flam")
 
-        mask = (star_norm.wave >= 0.1) * (star_norm.wave <= 3) 
+        mask = (star_norm.wave >= 0.1) * (star_norm.wave <= 3)
         wavelength = star_norm.wave[mask] * u.micron
         wavelength = wavelength.to(u.angstrom)
 
-        sed = star_norm.flux[mask] * u.erg/u.s/u.cm**2/u.angstrom
+        sed = star_norm.flux[mask] * u.erg / u.s / u.cm ** 2 / u.angstrom
         self.wavelength, self.spectrum = wavelength, sed
-        self.phoenix_model = True
+        self.model_type = "phoenix"
         return self
-
-
 
     def __repr__(self):
         return f"Target {self.name}"
@@ -119,7 +138,7 @@ class Target(object):
     def fit(self):
         bb_data = (
             self.spectrum.to(
-                u.erg / (u.Hz * u.s * u.cm**2),
+                u.erg / (u.Hz * u.s * u.cm ** 2),
                 equivalencies=u.spectral_density(self.wavelength),
             )
             / u.sr
@@ -151,14 +170,14 @@ class Target(object):
         self._corr = np.nanmean(self.spectrum / bb_model)
 
     def model_spectrum(self, wavelength):
-        if hasattr(self, "phoenix_model"):
+        if self.model_type == "phoenix":
             return np.interp(
-            wavelength,
-            self.wavelength,
-            self.spectrum,
-            left=np.nan,
-            right=np.nan,
-        )
+                wavelength,
+                self.wavelength,
+                self.spectrum,
+                left=np.nan,
+                right=np.nan,
+            )
         else:
             return (self._blackbody(wavelength) * u.sr).to(
                 self.spectrum.unit, equivalencies=u.spectral_density(wavelength)
