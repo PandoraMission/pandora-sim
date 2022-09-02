@@ -1,5 +1,7 @@
 """Deal with Pandora targets"""
 
+import os
+import warnings
 from dataclasses import dataclass
 
 import astropy.units as u
@@ -9,14 +11,12 @@ from astropy.constants import c
 from astropy.io import votable
 from astropy.modeling import models
 from astropy.utils.data import download_file
-import os
-from . import PACKAGEDIR
 from astroquery.vizier import Vizier
 
+from . import PACKAGEDIR
 
 phoenixpath = f"{PACKAGEDIR}/data/phoenix"
 os.environ["PYSYN_CDBS"] = phoenixpath
-import warnings
 
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", message="Extinction files not found in ")
