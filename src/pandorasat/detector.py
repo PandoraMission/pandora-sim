@@ -134,7 +134,7 @@ class Detector(abc.ABC):
         pass
 
     def sensitivity(self, wavelength):
-        sed = 1 * u.erg / u.s / u.cm ** 2 / u.angstrom
+        sed = 1 * u.erg / u.s / u.cm**2 / u.angstrom
         E = photon_energy(wavelength)
         telescope_area = np.pi * (Optics.mirror_diameter / 2) ** 2
         photon_flux_density = (

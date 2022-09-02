@@ -58,7 +58,7 @@ class NIRDetector(Detector):
         return sw_qe * u.DN / u.photon
 
     def throughput(self, wavelength):
-        return wavelength.value ** 0 * 0.714
+        return wavelength.value**0 * 0.714
 
     def wavelength_to_pixel(self, wavelength):
         if not hasattr(self, "_dispersion_df"):
