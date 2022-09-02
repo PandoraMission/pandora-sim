@@ -1,0 +1,24 @@
+THE PHOENIX MODELS BY FRANCE ALLARD AND COLLABORATORS
+
+These models are for 
+stars/brown dwarfs/planets (without irradiation), with a cloud model.
+These use static, spherical symmetric, 1D simulations to completely 
+describe the atmospheric emission spectrum. The models account for the 
+formation of molecular bands, such as those of water vapor, methane, or
+titanium dioxide, solving for the transfer equation over more than 20,000 
+wavelength points on average -  producing synthetic spectra with 2 Angstrom 
+resolution. The line selection is repeated at each iteration of the model 
+until it has converged and the thermal structure obtained. The models here 
+are calculated with a cloud model, valid across the entire parameter range. 
+
+More information can be found at: http://perso.ens-lyon.fr/france.allard/
+
+References:
+
+* Allard et al. ‘03, Allard et al. ‘07, Allard et al.
+‘09:http://perso.ens-lyon.fr/france.allard/
+
+* All these models can be found in the ‘Star, Brown Dwarf & Planet
+Simulator’:http://phoenix.ens-lyon.fr/simulator/index.faces
+
+Original files have names lte067-1.5-0.0.BT-Settl.7.bz2

@@ -76,6 +76,28 @@ test = ["pytest (>=7.0)", "pytest-doctestplus (>=0.12)", "pytest-astropy-header 
 test_all = ["pytest (>=7.0)", "pytest-doctestplus (>=0.12)", "pytest-astropy-header (>=0.2.1)", "pytest-astropy (>=0.9)", "pytest-xdist", "objgraph", "ipython (>=4.2)", "coverage", "skyfield (>=1.20)", "sgp4 (>=2.3)"]
 
 [[package]]
+name = "astroquery"
+version = "0.4.6"
+description = "Functions and classes to access online astronomical data resources"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+astropy = ">=4.0"
+beautifulsoup4 = ">=4.3.2"
+html5lib = ">=0.999"
+keyring = ">=4.0"
+numpy = ">=1.16"
+pyvo = ">=1.1"
+requests = ">=2.4.3"
+
+[package.extras]
+all = ["mocpy (>=0.5.2)", "astropy-healpix", "boto3", "regions", "pyregion", "aplpy"]
+docs = ["sphinx-astropy (>=1.5)", "scipy"]
+test = ["pytest-astropy", "matplotlib", "jinja2", "flask", "pytest-dependency"]
+
+[[package]]
 name = "asttokens"
 version = "2.0.5"
 description = "Annotate AST trees with source code positions"
@@ -145,7 +167,7 @@ python-versions = "*"
 name = "beautifulsoup4"
 version = "4.11.1"
 description = "Screen-scraping library"
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=3.6.0"
 
@@ -198,7 +220,7 @@ dev = ["pip-tools (==6.5.1)", "pytest (==7.1.1)", "flake8 (==4.0.1)", "tox (==3.
 name = "certifi"
 version = "2021.10.8"
 description = "Python package for providing Mozilla's CA Bundle."
-category = "dev"
+category = "main"
 optional = false
 python-versions = "*"
 
@@ -206,7 +228,7 @@ python-versions = "*"
 name = "cffi"
 version = "1.15.0"
 description = "Foreign Function Interface for Python calling C code."
-category = "dev"
+category = "main"
 optional = false
 python-versions = "*"
 
@@ -217,7 +239,7 @@ pycparser = "*"
 name = "charset-normalizer"
 version = "2.0.12"
 description = "The Real First Universal Charset Detector. Open, modern and actively maintained alternative to Chardet."
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=3.5.0"
 
@@ -242,6 +264,25 @@ description = "Cross-platform colored terminal text."
 category = "main"
 optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
+
+[[package]]
+name = "cryptography"
+version = "37.0.4"
+description = "cryptography is a package which provides cryptographic recipes and primitives to Python developers."
+category = "main"
+optional = false
+python-versions = ">=3.6"
+
+[package.dependencies]
+cffi = ">=1.12"
+
+[package.extras]
+docs = ["sphinx (>=1.6.5,!=1.8.0,!=3.1.0,!=3.1.1)", "sphinx-rtd-theme"]
+docstest = ["pyenchant (>=1.6.11)", "twine (>=1.12.0)", "sphinxcontrib-spelling (>=4.0.1)"]
+pep8test = ["black", "flake8", "flake8-import-order", "pep8-naming"]
+sdist = ["setuptools_rust (>=0.11.4)"]
+ssh = ["bcrypt (>=3.1.5)"]
+test = ["pytest (>=6.2.0)", "pytest-benchmark", "pytest-cov", "pytest-subtests", "pytest-xdist", "pretend", "iso8601", "pytz", "hypothesis (>=1.11.4,!=3.79.2)"]
 
 [[package]]
 name = "cycler"
@@ -360,10 +401,28 @@ optional = false
 python-versions = "*"
 
 [[package]]
+name = "html5lib"
+version = "1.1"
+description = "HTML parser based on the WHATWG HTML specification"
+category = "main"
+optional = false
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
+
+[package.dependencies]
+six = ">=1.9"
+webencodings = "*"
+
+[package.extras]
+all = ["genshi", "chardet (>=2.2)", "lxml"]
+chardet = ["chardet (>=2.2)"]
+genshi = ["genshi"]
+lxml = ["lxml"]
+
+[[package]]
 name = "idna"
 version = "3.3"
 description = "Internationalized Domain Names in Applications (IDNA)"
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=3.5"
 
@@ -371,7 +430,7 @@ python-versions = ">=3.5"
 name = "importlib-metadata"
 version = "4.11.3"
 description = "Read metadata from Python packages"
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=3.7"
 
@@ -479,6 +538,21 @@ colors = ["colorama (>=0.4.3,<0.5.0)"]
 plugins = ["setuptools"]
 
 [[package]]
+name = "jaraco.classes"
+version = "3.2.2"
+description = "Utility functions for Python class constructs"
+category = "main"
+optional = false
+python-versions = ">=3.7"
+
+[package.dependencies]
+more-itertools = "*"
+
+[package.extras]
+docs = ["sphinx", "jaraco.packaging (>=9)", "rst.linker (>=1.9)", "jaraco.tidelift (>=1.4)"]
+testing = ["pytest (>=6)", "pytest-checkdocs (>=2.4)", "pytest-flake8", "pytest-cov", "pytest-enabler (>=1.3)", "pytest-black (>=0.3.7)", "pytest-mypy (>=0.9.1)"]
+
+[[package]]
 name = "jedi"
 version = "0.18.1"
 description = "An autocompletion tool for Python that can be used for text editors."
@@ -492,6 +566,18 @@ parso = ">=0.8.0,<0.9.0"
 [package.extras]
 qa = ["flake8 (==3.8.3)", "mypy (==0.782)"]
 testing = ["Django (<3.1)", "colorama", "docopt", "pytest (<7.0.0)"]
+
+[[package]]
+name = "jeepney"
+version = "0.8.0"
+description = "Low-level, pure Python DBus protocol wrapper."
+category = "main"
+optional = false
+python-versions = ">=3.7"
+
+[package.extras]
+test = ["pytest", "pytest-trio", "pytest-asyncio (>=0.17)", "testpath", "trio", "async-timeout"]
+trio = ["trio", "async-generator"]
 
 [[package]]
 name = "jinja2"
@@ -669,6 +755,25 @@ toml = "*"
 [package.extras]
 rst2md = ["sphinx-gallery (>=0.7.0,<0.8.0)"]
 toml = ["toml"]
+
+[[package]]
+name = "keyring"
+version = "23.9.0"
+description = "Store and access your passwords safely."
+category = "main"
+optional = false
+python-versions = ">=3.7"
+
+[package.dependencies]
+importlib-metadata = {version = ">=3.6", markers = "python_version < \"3.10\""}
+"jaraco.classes" = "*"
+jeepney = {version = ">=0.4.2", markers = "sys_platform == \"linux\""}
+pywin32-ctypes = {version = "<0.1.0 || >0.1.0,<0.1.1 || >0.1.1", markers = "sys_platform == \"win32\""}
+SecretStorage = {version = ">=3.2", markers = "sys_platform == \"linux\""}
+
+[package.extras]
+docs = ["sphinx", "jaraco.packaging (>=9)", "rst.linker (>=1.9)", "jaraco.tidelift (>=1.4)"]
+testing = ["pytest (>=6)", "pytest-checkdocs (>=2.4)", "pytest-flake8", "flake8 (<5)", "pytest-cov", "pytest-enabler (>=1.3)", "pytest-black (>=0.3.7)", "pytest-mypy (>=0.9.1)"]
 
 [[package]]
 name = "kiwisolver"
@@ -938,7 +1043,7 @@ pytkdocs = ">=0.14"
 name = "more-itertools"
 version = "8.12.0"
 description = "More routines for operating on iterables, beyond itertools"
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=3.5"
 
@@ -1280,7 +1385,7 @@ python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
 name = "pycparser"
 version = "2.21"
 description = "C parser in Python"
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
 
@@ -1346,6 +1451,20 @@ optional = false
 python-versions = ">=3.7"
 
 [[package]]
+name = "pysynphot"
+version = "2.0.0"
+description = "Python Synthetic Photometry Utilities"
+category = "main"
+optional = false
+python-versions = ">=3.6"
+
+[package.dependencies]
+astropy = "*"
+beautifulsoup4 = "*"
+numpy = "*"
+six = "*"
+
+[[package]]
 name = "pytest"
 version = "5.4.3"
 description = "pytest: simple powerful testing with Python"
@@ -1401,10 +1520,35 @@ optional = false
 python-versions = "*"
 
 [[package]]
+name = "pyvo"
+version = "1.3"
+description = "Astropy affiliated package for accessing Virtual Observatory data and services"
+category = "main"
+optional = false
+python-versions = ">=3.8"
+
+[package.dependencies]
+astropy = ">=4.0"
+requests = "*"
+
+[package.extras]
+all = ["mimeparse"]
+docs = ["sphinx-astropy"]
+test = ["pytest-astropy"]
+
+[[package]]
 name = "pywin32"
 version = "303"
 description = "Python for Window Extensions"
 category = "dev"
+optional = false
+python-versions = "*"
+
+[[package]]
+name = "pywin32-ctypes"
+version = "0.2.0"
+description = ""
+category = "main"
 optional = false
 python-versions = "*"
 
@@ -1451,7 +1595,7 @@ py = {version = "*", markers = "implementation_name == \"pypy\""}
 name = "requests"
 version = "2.27.1"
 description = "Python HTTP for Humans."
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, !=3.5.*"
 
@@ -1475,6 +1619,18 @@ python-versions = ">=3.8,<3.11"
 
 [package.dependencies]
 numpy = ">=1.17.3,<1.25.0"
+
+[[package]]
+name = "secretstorage"
+version = "3.3.3"
+description = "Python bindings to FreeDesktop.org Secret Service API"
+category = "main"
+optional = false
+python-versions = ">=3.6"
+
+[package.dependencies]
+cryptography = ">=2.0"
+jeepney = ">=0.6"
 
 [[package]]
 name = "send2trash"
@@ -1525,7 +1681,7 @@ python-versions = ">=3.5"
 name = "soupsieve"
 version = "2.3.2.post1"
 description = "A modern CSS selector implementation for Beautiful Soup."
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=3.6"
 
@@ -1640,7 +1796,7 @@ python-versions = ">=3.7"
 name = "urllib3"
 version = "1.26.9"
 description = "HTTP library with thread-safe connection pooling, file post, and more."
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, <4"
 
@@ -1672,7 +1828,7 @@ python-versions = "*"
 name = "webencodings"
 version = "0.5.1"
 description = "Character encoding aliases for legacy web content"
-category = "dev"
+category = "main"
 optional = false
 python-versions = "*"
 
@@ -1693,7 +1849,7 @@ test = ["websockets"]
 name = "zipp"
 version = "3.8.0"
 description = "Backport of pathlib-compatible object wrapper for zip files"
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=3.7"
 
@@ -1704,7 +1860,7 @@ testing = ["pytest (>=6)", "pytest-checkdocs (>=2.4)", "pytest-flake8", "pytest-
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.8,<3.11"
-content-hash = "c30accd796b5fb4a1902441dba956d709cbeebd6a79d54a7b1f998c74e06c1cc"
+content-hash = "fe771dfd585ebd40dd6ed044aabca843d3467996e0d2537d117b39780e0a7c09"
 
 [metadata.files]
 anyio = [
@@ -1761,6 +1917,10 @@ astropy = [
     {file = "astropy-5.0.4-cp39-cp39-win32.whl", hash = "sha256:3a23ca012799969deebe1e64b72c3095c90e6861d8a2e8c989382b333d418aca"},
     {file = "astropy-5.0.4-cp39-cp39-win_amd64.whl", hash = "sha256:d2b2e1f23f5cf91a9067028ec09d8d4daf67c2027707563c47e10ed9009fefd5"},
     {file = "astropy-5.0.4.tar.gz", hash = "sha256:001184f1a9c3f526a363883ce28efb9cbf076df3d151ca3e131509a248f0dfb9"},
+]
+astroquery = [
+    {file = "astroquery-0.4.6-py3-none-any.whl", hash = "sha256:e1bc4996af7500370837d31491bd4ee7f0c954c78d24cd54fb1cceb755469094"},
+    {file = "astroquery-0.4.6.tar.gz", hash = "sha256:307ca554cb734a0ca9a22f86f5effe7e413af913ae65e1578972d847b1fe13ee"},
 ]
 asttokens = [
     {file = "asttokens-2.0.5-py2.py3-none-any.whl", hash = "sha256:0844691e88552595a6f4a4281a9f7f79b8dd45ca4ccea82e5e05b4bbdb76705c"},
@@ -1887,6 +2047,7 @@ colorama = [
     {file = "colorama-0.4.4-py2.py3-none-any.whl", hash = "sha256:9f47eda37229f68eee03b24b9748937c7dc3868f906e8ba69fbcbdd3bc5dc3e2"},
     {file = "colorama-0.4.4.tar.gz", hash = "sha256:5941b2b48a20143d2267e95b1c2a7603ce057ee39fd88e7329b0c292aa16869b"},
 ]
+cryptography = []
 cycler = [
     {file = "cycler-0.11.0-py3-none-any.whl", hash = "sha256:3a27e95f763a428a739d2add979fa7494c912a32c17c4c38c4d5f082cad165a3"},
     {file = "cycler-0.11.0.tar.gz", hash = "sha256:9c87405839a19696e837b3b818fed3f5f69f16f1eec1a1ad77e043dcea9c772f"},
@@ -1948,6 +2109,10 @@ grismconf = [
     {file = "grismconf-1.32-py3.8.egg", hash = "sha256:e54f51ee3db5e6f953e5f0b73f5744f010986ef0d09ea3d4bac0b94e688b1b96"},
     {file = "grismconf-1.32.tar.gz", hash = "sha256:10175ab85efcfd11756f53c821a2f33951766ceca358b98ba7f6a2f025f29b0a"},
 ]
+html5lib = [
+    {file = "html5lib-1.1-py2.py3-none-any.whl", hash = "sha256:0d78f8fde1c230e99fe37986a60526d7049ed4bf8a9fadbad5f00e22e58e041d"},
+    {file = "html5lib-1.1.tar.gz", hash = "sha256:b2e5b40261e20f354d198eae92afc10d750afb487ed5e50f9c4eaf07c184146f"},
+]
 idna = [
     {file = "idna-3.3-py3-none-any.whl", hash = "sha256:84d9dd047ffa80596e0f246e2eab0b391788b0503584e8945f2368256d2735ff"},
     {file = "idna-3.3.tar.gz", hash = "sha256:9d643ff0a55b762d5cdb124b8eaa99c66322e2157b69160bc32796e824360e6d"},
@@ -1976,9 +2141,14 @@ isort = [
     {file = "isort-5.10.1-py3-none-any.whl", hash = "sha256:6f62d78e2f89b4500b080fe3a81690850cd254227f27f75c3a0c491a1f351ba7"},
     {file = "isort-5.10.1.tar.gz", hash = "sha256:e8443a5e7a020e9d7f97f1d7d9cd17c88bcb3bc7e218bf9cf5095fe550be2951"},
 ]
+"jaraco.classes" = []
 jedi = [
     {file = "jedi-0.18.1-py2.py3-none-any.whl", hash = "sha256:637c9635fcf47945ceb91cd7f320234a7be540ded6f3e99a50cb6febdfd1ba8d"},
     {file = "jedi-0.18.1.tar.gz", hash = "sha256:74137626a64a99c8eb6ae5832d99b3bdd7d29a3850fe2aa80a4126b2a7d949ab"},
+]
+jeepney = [
+    {file = "jeepney-0.8.0-py3-none-any.whl", hash = "sha256:c0a454ad016ca575060802ee4d590dd912e35c122fa04e70306de3d076cce755"},
+    {file = "jeepney-0.8.0.tar.gz", hash = "sha256:5efe48d255973902f6badc3ce55e2aa6c5c3b3bc642059ef3a91247bcfcc5806"},
 ]
 jinja2 = [
     {file = "Jinja2-3.1.2-py3-none-any.whl", hash = "sha256:6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61"},
@@ -2020,6 +2190,7 @@ jupytext = [
     {file = "jupytext-1.13.8-py3-none-any.whl", hash = "sha256:625d2d2012763cc87d3f0dd60383516cec442c11894f53ad0c5ee5aa2a52caa2"},
     {file = "jupytext-1.13.8.tar.gz", hash = "sha256:60148537de5aa08bb9cbe8797500a49360b7a8eb6667736ae5b80e3ec7ba084d"},
 ]
+keyring = []
 kiwisolver = [
     {file = "kiwisolver-1.4.2-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:6e395ece147f0692ca7cdb05a028d31b83b72c369f7b4a2c1798f4b96af1e3d8"},
     {file = "kiwisolver-1.4.2-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:0b7f50a1a25361da3440f07c58cd1d79957c2244209e4f166990e770256b6b0b"},
@@ -2598,6 +2769,7 @@ pyrsistent = [
     {file = "pyrsistent-0.18.1-cp39-cp39-win_amd64.whl", hash = "sha256:e24a828f57e0c337c8d8bb9f6b12f09dfdf0273da25fda9e314f0b684b415a07"},
     {file = "pyrsistent-0.18.1.tar.gz", hash = "sha256:d4d61f8b993a7255ba714df3aca52700f8125289f84f704cf80916517c46eb96"},
 ]
+pysynphot = []
 pytest = [
     {file = "pytest-5.4.3-py3-none-any.whl", hash = "sha256:5c0db86b698e8f170ba4582a492248919255fcd4c79b1ee64ace34301fb589a1"},
     {file = "pytest-5.4.3.tar.gz", hash = "sha256:7979331bfcba207414f5e1263b5a0f8f521d0f457318836a7355531ed1a4c7d8"},
@@ -2614,6 +2786,10 @@ pytz = [
     {file = "pytz-2022.1-py2.py3-none-any.whl", hash = "sha256:e68985985296d9a66a881eb3193b0906246245294a881e7c8afe623866ac6a5c"},
     {file = "pytz-2022.1.tar.gz", hash = "sha256:1e760e2fe6a8163bc0b3d9a19c4f84342afa0a2affebfaa84b01b978a02ecaa7"},
 ]
+pyvo = [
+    {file = "pyvo-1.3-py3-none-any.whl", hash = "sha256:50bdc829db62772fc46ac5fc80823b1b91c8685ea59db713736b83aeeb779bb7"},
+    {file = "pyvo-1.3.tar.gz", hash = "sha256:846a54a05a8ddb47a8c2cc3077434779b0e4ccc1b74a7a5408593cb673307d67"},
+]
 pywin32 = [
     {file = "pywin32-303-cp310-cp310-win32.whl", hash = "sha256:6fed4af057039f309263fd3285d7b8042d41507343cd5fa781d98fcc5b90e8bb"},
     {file = "pywin32-303-cp310-cp310-win_amd64.whl", hash = "sha256:51cb52c5ec6709f96c3f26e7795b0bf169ee0d8395b2c1d7eb2c029a5008ed51"},
@@ -2627,6 +2803,10 @@ pywin32 = [
     {file = "pywin32-303-cp38-cp38-win_amd64.whl", hash = "sha256:793bf74fce164bcffd9d57bb13c2c15d56e43c9542a7b9687b4fccf8f8a41aba"},
     {file = "pywin32-303-cp39-cp39-win32.whl", hash = "sha256:7d3271c98434617a11921c5ccf74615794d97b079e22ed7773790822735cc352"},
     {file = "pywin32-303-cp39-cp39-win_amd64.whl", hash = "sha256:79cbb862c11b9af19bcb682891c1b91942ec2ff7de8151e2aea2e175899cda34"},
+]
+pywin32-ctypes = [
+    {file = "pywin32-ctypes-0.2.0.tar.gz", hash = "sha256:24ffc3b341d457d48e8922352130cf2644024a4ff09762a2261fd34c36ee5942"},
+    {file = "pywin32_ctypes-0.2.0-py2.py3-none-any.whl", hash = "sha256:9dc2d991b3479cc2df15930958b674a48a227d5361d413827a4cfd0b5876fc98"},
 ]
 pywinpty = [
     {file = "pywinpty-2.0.5-cp310-none-win_amd64.whl", hash = "sha256:f86c76e2881c37e69678cbbf178109f8da1fa8584db24d58e1b9369b0276cfcb"},
@@ -2742,6 +2922,7 @@ scipy = [
     {file = "scipy-1.8.1-cp39-cp39-win_amd64.whl", hash = "sha256:9dd4012ac599a1e7eb63c114d1eee1bcfc6dc75a29b589ff0ad0bb3d9412034f"},
     {file = "scipy-1.8.1.tar.gz", hash = "sha256:9e3fb1b0e896f14a85aa9a28d5f755daaeeb54c897b746df7a55ccb02b340f33"},
 ]
+secretstorage = []
 send2trash = [
     {file = "Send2Trash-1.8.0-py3-none-any.whl", hash = "sha256:f20eaadfdb517eaca5ce077640cb261c7d2698385a6a0f072a4a5447fd49fa08"},
     {file = "Send2Trash-1.8.0.tar.gz", hash = "sha256:d2c24762fd3759860a0aff155e45871447ea58d2be6bdd39b5c8f966a0c99c2d"},
