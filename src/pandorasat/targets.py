@@ -39,12 +39,12 @@ class Target(object):
         wavelength = (c / (np.asarray(df["sed_freq"]) * u.GHz)).to(u.angstrom)
         sed_flux = np.asarray(df["sed_flux"]) * u.jansky
         sed_flux = sed_flux.to(
-            u.erg / u.cm ** 2 / u.s / u.angstrom,
+            u.erg / u.cm**2 / u.s / u.angstrom,
             equivalencies=u.spectral_density(wavelength),
         )
         sed_flux_err = np.asarray(df["sed_eflux"]) * u.jansky
         sed_flux_err = sed_flux_err.to(
-            u.erg / u.cm ** 2 / u.s / u.angstrom,
+            u.erg / u.cm**2 / u.s / u.angstrom,
             equivalencies=u.spectral_density(wavelength),
         )
         k = np.isfinite(sed_flux_err)
@@ -88,7 +88,7 @@ class Target(object):
         wavelength = star_norm.wave[mask] * u.micron
         wavelength = wavelength.to(u.angstrom)
 
-        sed = star_norm.flux[mask] * u.erg / u.s / u.cm ** 2 / u.angstrom
+        sed = star_norm.flux[mask] * u.erg / u.s / u.cm**2 / u.angstrom
         self.wavelength, self.spectrum = wavelength, sed
         self.model_type = "phoenix"
         return self
@@ -138,7 +138,7 @@ class Target(object):
     def fit(self):
         bb_data = (
             self.spectrum.to(
-                u.erg / (u.Hz * u.s * u.cm ** 2),
+                u.erg / (u.Hz * u.s * u.cm**2),
                 equivalencies=u.spectral_density(self.wavelength),
             )
             / u.sr
