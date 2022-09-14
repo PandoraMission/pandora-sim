@@ -96,7 +96,7 @@ class Target(object):
     def __repr__(self):
         return f"Target {self.name}"
 
-    def plot_spectrum(self):
+    def plot_spectrum(self, fig=None):
         wave_high = (
             np.linspace(
                 self.wavelength.min().value * 0.9,
@@ -107,7 +107,8 @@ class Target(object):
         )
         bb_model = self.model_spectrum(wave_high)
         with plt.style.context("seaborn-white"):
-            fig = plt.figure()
+            if fig is None:
+                fig = plt.figure()
             if hasattr(self, "spectrum_err"):
                 plt.errorbar(
                     self.wavelength,
