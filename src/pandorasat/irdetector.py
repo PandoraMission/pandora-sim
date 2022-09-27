@@ -122,7 +122,7 @@ class NIRDetector(Detector):
         pix_edges = np.vstack([pix - dp / 2, pix + dp / 2]).T
         wav_edges = self.pixel_to_wavelength(pix_edges * u.pixel)
         # Iterate every pixel, integrate the SED
-        for pdx in tqdm(range(len(pix))):
+        for pdx in range(len(pix)):
             # Find the value in each pixel
             k = (wavelength > wav_edges[pdx][0]) & (wavelength < wav_edges[pdx][1])
             wp = np.hstack(

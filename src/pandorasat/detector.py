@@ -7,6 +7,7 @@ import astropy.units as u
 import numpy as np
 from astropy.convolution import Gaussian2DKernel, convolve
 from astropy.io import fits
+from scipy.interpolate import interp2d
 
 from . import PACKAGEDIR
 from .optics import Optics
@@ -105,6 +106,27 @@ class Detector(abc.ABC):
             w,
             psf_cube.transpose([1, 2, 0]),
         )
+        #self._reinterpolate_psf()
+
+    def reinterpolate_psf(self, pixel_resolution=4):
+        """Optionally reinterpolate internal PSF to a resolution.
+        
+        Parameters
+        ----------
+        pixel_resolution: int
+            Number of sub-pixels per pixel in the PSF. """
+        dp = 1 / pixel_resolution
+        x = np.arange(-40, 40, dp)
+        y = np.arange(-40, 40, dp)
+
+        psf_cube = np.asarray(
+            [interp2d(self.psf_x, self.psf_y, psf)(x, y) for psf in self.psf_cube.T]
+        ).T
+        psf_cube /= np.asarray(
+            [np.trapz(np.trapz(psf, x, axis=0), y) for psf in psf_cube.T]
+        )[None, None, :]
+        self.psf_x, self.psf_y, self.psf_cube = x * u.pixel, y * u.pixel, psf_cube
+        self.psf_pixel_resolution = pixel_resolution
 
     def _bin_prf(self, wavelength, center=(0, 0)):
         """
@@ -113,9 +135,10 @@ class Detector(abc.ABC):
         mod = (self.psf_x.value + center[0]) % 1
         cyc = (self.psf_x.value + center[0]) - mod
         xbin = np.unique(cyc)
+        psf0 = self.psf(wavelength)
         psf1 = np.asarray(
             [
-                self.psf(wavelength)[cyc == c, :].sum(axis=0) / (cyc == c).sum()
+                psf0[cyc == c, :].sum(axis=0) / (cyc == c).sum()
                 for c in xbin
             ]
         )
@@ -150,6 +173,7 @@ class Detector(abc.ABC):
 
     def prf(
         self,
+        wavelength,
         center=(0, 0),
         seed=42,
         xstd=4.5,
@@ -180,7 +204,7 @@ class Detector(abc.ABC):
         jitter_y += center[1]
         xs, ys, prfs = [], [], []
         for jx, jy in zip(jitter_x, jitter_y):
-            x, y, prf = self._bin_prf(center=(jx, jy))
+            x, y, prf = self._bin_prf(wavelength, center=(jx, jy))
             xs.append(x)
             ys.append(y)
             prfs.append(prf)
