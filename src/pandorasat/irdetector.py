@@ -3,7 +3,6 @@
 import astropy.units as u
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
 
 from . import PACKAGEDIR
 from .detector import Detector

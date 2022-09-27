@@ -106,15 +106,15 @@ class Detector(abc.ABC):
             w,
             psf_cube.transpose([1, 2, 0]),
         )
-        #self._reinterpolate_psf()
+        # self._reinterpolate_psf()
 
     def reinterpolate_psf(self, pixel_resolution=4):
         """Optionally reinterpolate internal PSF to a resolution.
-        
+
         Parameters
         ----------
         pixel_resolution: int
-            Number of sub-pixels per pixel in the PSF. """
+            Number of sub-pixels per pixel in the PSF."""
         dp = 1 / pixel_resolution
         x = np.arange(-40, 40, dp)
         y = np.arange(-40, 40, dp)
@@ -137,10 +137,7 @@ class Detector(abc.ABC):
         xbin = np.unique(cyc)
         psf0 = self.psf(wavelength)
         psf1 = np.asarray(
-            [
-                psf0[cyc == c, :].sum(axis=0) / (cyc == c).sum()
-                for c in xbin
-            ]
+            [psf0[cyc == c, :].sum(axis=0) / (cyc == c).sum() for c in xbin]
         )
         mod = (self.psf_y.value + center[1]) % 1
         cyc = (self.psf_y.value + center[1]) - mod
