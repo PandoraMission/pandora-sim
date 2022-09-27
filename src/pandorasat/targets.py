@@ -1,5 +1,7 @@
 """Deal with Pandora targets"""
 
+import os
+import warnings
 from dataclasses import dataclass
 
 import astropy.units as u
@@ -9,6 +11,16 @@ from astropy.constants import c
 from astropy.io import votable
 from astropy.modeling import models
 from astropy.utils.data import download_file
+from astroquery.vizier import Vizier
+
+from . import PACKAGEDIR
+
+phoenixpath = f"{PACKAGEDIR}/data/phoenix"
+os.environ["PYSYN_CDBS"] = phoenixpath
+
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", message="Extinction files not found in ")
+    import pysynphot
 
 
 @dataclass
@@ -46,16 +58,45 @@ class Target(object):
         )
         self.ra, self.dec = df["_RAJ2000"].data.mean(), df["_DEJ2000"].data.mean()
         self.fit()
+        self.model_type = "sed_fit"
         return self
 
-    @staticmethod
-    def from_phoenix(self):
-        raise ValueError
+    def from_phoenix(self, teff=None, logg=None, Jmag=None):
+
+        # Get data from TIC
+        viz_dat = np.asarray(
+            Vizier(columns=["Teff", "logg", "Jmag"])
+            .query_object(self.name, catalog="IV/39/tic82", radius=0.1 * u.arcsecond)[
+                0
+            ]["Teff", "logg", "Jmag"]
+            .to_pandas()
+            .iloc[0]
+        )
+        if teff is None:
+            teff = viz_dat[0]
+        if logg is None:
+            logg = viz_dat[1]
+        if Jmag is None:
+            Jmag = viz_dat[2]
+
+        star = pysynphot.Icat("phoenix", teff, 0.0, logg)
+        star_norm = star.renorm(Jmag, "vegamag", pysynphot.ObsBandpass("johnson,j"))
+        star_norm.convert("Micron")
+        star_norm.convert("flam")
+
+        mask = (star_norm.wave >= 0.1) * (star_norm.wave <= 3)
+        wavelength = star_norm.wave[mask] * u.micron
+        wavelength = wavelength.to(u.angstrom)
+
+        sed = star_norm.flux[mask] * u.erg / u.s / u.cm**2 / u.angstrom
+        self.wavelength, self.spectrum = wavelength, sed
+        self.model_type = "phoenix"
+        return self
 
     def __repr__(self):
         return f"Target {self.name}"
 
-    def plot_spectrum(self):
+    def plot_spectrum(self, fig=None):
         wave_high = (
             np.linspace(
                 self.wavelength.min().value * 0.9,
@@ -66,15 +107,24 @@ class Target(object):
         )
         bb_model = self.model_spectrum(wave_high)
         with plt.style.context("seaborn-white"):
-            fig = plt.figure()
-            plt.errorbar(
-                self.wavelength,
-                self.spectrum,
-                self.spectrum_err,
-                ls="",
-                marker=".",
-                c="k",
-            )
+            if fig is None:
+                fig = plt.figure()
+            if hasattr(self, "spectrum_err"):
+                plt.errorbar(
+                    self.wavelength,
+                    self.spectrum,
+                    self.spectrum_err,
+                    ls="",
+                    marker=".",
+                    c="k",
+                )
+            else:
+                plt.plot(
+                    self.wavelength,
+                    self.spectrum,
+                    ls="-",
+                    c="k",
+                )
             plt.xlabel(f"Wavelength {self.wavelength.unit._repr_latex_()}")
             plt.ylabel(f"Spectrum {self.spectrum.unit._repr_latex_()}")
             plt.yscale("log")
@@ -121,6 +171,15 @@ class Target(object):
         self._corr = np.nanmean(self.spectrum / bb_model)
 
     def model_spectrum(self, wavelength):
-        return (self._blackbody(wavelength) * u.sr).to(
-            self.spectrum.unit, equivalencies=u.spectral_density(wavelength)
-        ) * self._corr
+        if self.model_type == "phoenix":
+            return np.interp(
+                wavelength,
+                self.wavelength,
+                self.spectrum,
+                left=np.nan,
+                right=np.nan,
+            )
+        else:
+            return (self._blackbody(wavelength) * u.sr).to(
+                self.spectrum.unit, equivalencies=u.spectral_density(wavelength)
+            ) * self._corr

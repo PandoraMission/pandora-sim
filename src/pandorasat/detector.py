@@ -204,7 +204,7 @@ class Detector(abc.ABC):
         jitter_y += center[1]
         xs, ys, prfs = [], [], []
         for jx, jy in zip(jitter_x, jitter_y):
-            x, y, prf = self._bin_prf(wavelength, center=(jx, jy))
+            x, y, prf = self._bin_prf(wavelength=wavelength, center=(jx, jy))
             xs.append(x)
             ys.append(y)
             prfs.append(prf)
