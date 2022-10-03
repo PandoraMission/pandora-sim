@@ -2,6 +2,7 @@
 
 import abc
 from dataclasses import dataclass
+import pandas as pd
 
 import astropy.units as u
 import numpy as np
@@ -257,6 +258,29 @@ class Detector(abc.ABC):
         """Get the PSF at a certain wavelength, interpolated from self.psf_cube"""
         return interp_psf_cube(wavelength, self.psf_wavelength, self.psf_cube)
 
+    def wavelength_to_pixel(self, wavelength):
+        if not hasattr(self, "_dispersion_df"):
+            raise ValueError("No wavelength dispersion information")
+        df = self._dispersion_df
+        return np.interp(
+            wavelength,
+            np.asarray(df.Wavelength) * u.micron,
+            np.asarray(df.Pixel) * u.pixel,
+            left=np.nan,
+            right=np.nan,
+        )
+
+    def pixel_to_wavelength(self, pixel):
+        if not hasattr(self, "_dispersion_df"):
+            raise ValueError("No wavelength dispersion information")
+        df = self._dispersion_df
+        return np.interp(
+            pixel,
+            np.asarray(df.Pixel) * u.pixel,
+            np.asarray(df.Wavelength) * u.micron,
+            left=np.nan,
+            right=np.nan,
+        )
 
 def interp_psf_cube(w, wp, fp):
     if w in wp:

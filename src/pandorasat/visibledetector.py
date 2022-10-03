@@ -2,6 +2,7 @@
 import astropy.units as u
 import numpy as np
 from astropy.io import votable
+import pandas as pd
 
 from . import PACKAGEDIR
 from .detector import Detector
@@ -9,6 +10,13 @@ from .detector import Detector
 
 class VisibleDetector(Detector):
     """Pandora Visible Detector"""
+
+    @property
+    def _dispersion_df(self):
+        return pd.read_csv(
+                f"{PACKAGEDIR}/data/pixel_vs_wavelength_vis.csv"
+            )
+
 
     def qe(self, wavelength):
         """
@@ -35,12 +43,3 @@ class VisibleDetector(Detector):
 
     def throughput(self, wavelength):
         return wavelength.value**0 * 0.816
-
-    def wavelength_to_pixel(self, wavelength):
-        if self.sensitivity(wavelength).value == 0:
-            return np.nan
-        else:
-            return 0
-
-    def pixel_to_wavelength(self, pixel):
-        raise ValueError("No unique solution exists")

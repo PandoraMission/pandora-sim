@@ -9,6 +9,13 @@ from .detector import Detector
 
 
 class NIRDetector(Detector):
+
+    @property
+    def _dispersion_df(self):
+        return pd.read_csv(
+                f"{PACKAGEDIR}/data/pixel_vs_wavelength.csv"
+            )
+
     def qe(self, wavelength):
         """
         Calculate the quantum efficiency of the detector from the JWST NIRCam models.
@@ -58,34 +65,6 @@ class NIRDetector(Detector):
 
     def throughput(self, wavelength):
         return wavelength.value**0 * 0.61
-
-    def wavelength_to_pixel(self, wavelength):
-        if not hasattr(self, "_dispersion_df"):
-            self._dispersion_df = pd.read_csv(
-                f"{PACKAGEDIR}/data/pixel_vs_wavelength.csv"
-            )
-        df = self._dispersion_df
-        return np.interp(
-            wavelength,
-            np.asarray(df.Wavelength) * u.micron,
-            np.asarray(df.Pixel) * u.pixel,
-            left=np.nan,
-            right=np.nan,
-        )
-
-    def pixel_to_wavelength(self, pixel):
-        if not hasattr(self, "_dispersion_df"):
-            self._dispersion_df = pd.read_csv(
-                f"{PACKAGEDIR}/data/pixel_vs_wavelength.csv"
-            )
-        df = pd.read_csv(f"{PACKAGEDIR}/data/pixel_vs_wavelength.csv")
-        return np.interp(
-            pixel,
-            np.asarray(df.Pixel) * u.pixel,
-            np.asarray(df.Wavelength) * u.micron,
-            left=np.nan,
-            right=np.nan,
-        )
 
     def get_trace(
         self,
