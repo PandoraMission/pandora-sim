@@ -1,8 +1,8 @@
 """Holds metadata and methods on Pandora VISDA"""
 import astropy.units as u
 import numpy as np
-from astropy.io import votable
 import pandas as pd
+from astropy.io import votable
 
 from . import PACKAGEDIR
 from .detector import Detector
@@ -13,10 +13,7 @@ class VisibleDetector(Detector):
 
     @property
     def _dispersion_df(self):
-        return pd.read_csv(
-                f"{PACKAGEDIR}/data/pixel_vs_wavelength_vis.csv"
-            )
-
+        return pd.read_csv(f"{PACKAGEDIR}/data/pixel_vs_wavelength_vis.csv")
 
     def qe(self, wavelength):
         """

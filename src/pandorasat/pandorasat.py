@@ -26,12 +26,19 @@ class PandoraSat:
     Orbit = Orbit()
     Optics = Optics()
     NIRDA = NIRDetector(
-        "NIR", 1.19 * u.arcsec / u.pixel, 18.0 * u.um / u.pixel, 2.0 * u.electron / u.DN
+        "NIR",
+        1.19 * u.arcsec / u.pixel,
+        18.0 * u.um / u.pixel,
+        512 * u.pixel,
+        512 * u.pixel,
+        2.0 * u.electron / u.DN,
     )
     VISDA = VisibleDetector(
         "Visible",
         0.78 * u.arcsec / u.pixel,
         6.5 * u.um / u.pixel,
+        512 * u.pixel,
+        512 * u.pixel,
         2.0 * u.electron / u.DN,
     )
     targetlist = pd.read_csv(f"{PACKAGEDIR}/data/targets.csv")

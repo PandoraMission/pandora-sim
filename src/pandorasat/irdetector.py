@@ -9,12 +9,9 @@ from .detector import Detector
 
 
 class NIRDetector(Detector):
-
     @property
     def _dispersion_df(self):
-        return pd.read_csv(
-                f"{PACKAGEDIR}/data/pixel_vs_wavelength.csv"
-            )
+        return pd.read_csv(f"{PACKAGEDIR}/data/pixel_vs_wavelength.csv")
 
     def qe(self, wavelength):
         """

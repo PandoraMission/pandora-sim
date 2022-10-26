@@ -2,7 +2,6 @@
 
 import abc
 from dataclasses import dataclass
-import pandas as pd
 
 import astropy.units as u
 import numpy as np
@@ -37,6 +36,8 @@ class Detector(abc.ABC):
     name: str
     pixel_scale: float
     pixel_size: float
+    naxis1: int
+    naxis2: int
     gain: float = 2.0 * u.electron / u.DN
 
     def __post_init__(self):
@@ -256,7 +257,9 @@ class Detector(abc.ABC):
 
     def psf(self, wavelength):
         """Get the PSF at a certain wavelength, interpolated from self.psf_cube"""
-        return interp_psf_cube(wavelength, self.psf_wavelength, self.psf_cube)
+        return interp_psf_cube(
+            wavelength.to(u.micron), self.psf_wavelength, self.psf_cube
+        )
 
     def wavelength_to_pixel(self, wavelength):
         if not hasattr(self, "_dispersion_df"):
@@ -281,6 +284,7 @@ class Detector(abc.ABC):
             left=np.nan,
             right=np.nan,
         )
+
 
 def interp_psf_cube(w, wp, fp):
     if w in wp:
