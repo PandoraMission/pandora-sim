@@ -38,5 +38,21 @@ class VisibleDetector(Detector):
             np.interp(wavelength, wav, transmission, left=0, right=0) * u.DN / u.photon
         )
 
+    @property
+    def dark(self):
+        return 2 * u.electron / u.second
+   
+    @property
+    def read_noise(self):
+        return 2.1 * u.electron
+
+    @property
+    def bias(self):
+        return 100 * u.electron
+
+    @property
+    def integration_time(self):
+        return 0.2 * u.second
+
     def throughput(self, wavelength):
         return wavelength.value**0 * 0.816

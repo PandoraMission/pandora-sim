@@ -37,8 +37,8 @@ class PandoraSat:
         "Visible",
         0.78 * u.arcsec / u.pixel,
         6.5 * u.um / u.pixel,
-        512 * u.pixel,
-        512 * u.pixel,
+        2048 * u.pixel,
+        2048 * u.pixel,
         2.0 * u.electron / u.DN,
     )
     targetlist = pd.read_csv(f"{PACKAGEDIR}/data/targets.csv")
