@@ -119,7 +119,7 @@ class NIRDetector(Detector):
             ).to(u.electron / u.s)
 
             # Build the PRF at this wavelength
-#            x, y, prf = self._bin_prf(wavelength=wav[pdx], center=(pix[pdx], 0))
+            #            x, y, prf = self._bin_prf(wavelength=wav[pdx], center=(pix[pdx], 0))
             try:
                 x, y, prf = self.psf.prf([wav[pdx]], location=(pix[pdx], 0))
             except OutOfBoundsError:

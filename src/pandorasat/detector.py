@@ -5,14 +5,12 @@ from dataclasses import dataclass
 
 import astropy.units as u
 import numpy as np
-from astropy.convolution import Gaussian2DKernel, convolve
-from astropy.io import fits
-from scipy.interpolate import interp2d
 
 from . import PACKAGEDIR
 from .optics import Optics
-from .utils import get_jitter, load_vega, photon_energy
 from .psf import PSF
+from .utils import load_vega, photon_energy
+
 
 @dataclass
 class Detector(abc.ABC):
@@ -42,16 +40,15 @@ class Detector(abc.ABC):
 
     def __post_init__(self):
         if self.name.lower() in ["visda", "vis", "visible", "v"]:
-        #    self.psf_fname = f"{PACKAGEDIR}/data/Pandora_vis.fits"
+            #    self.psf_fname = f"{PACKAGEDIR}/data/Pandora_vis.fits"
             self.psf = PSF(f"{PACKAGEDIR}/data/Pandora_vis_20220506.fits")
         elif self.name.lower() in ["nirda", "nir", "ir"]:
-        #    self.psf_fname = f"{PACKAGEDIR}/data/Pandora_nir.fits"
+            #    self.psf_fname = f"{PACKAGEDIR}/data/Pandora_nir.fits"
             self.psf = PSF(f"{PACKAGEDIR}/data/Pandora_nir_20220506.fits")
         else:
             raise ValueError(f"No such detector as {self.name}")
-#        self._get_psf()
+        #        self._get_psf()
         self.zeropoint = self._estimate_zeropoint()
-        
 
     def __repr__(self):
         return f"Pandora {self.name} Detector"
