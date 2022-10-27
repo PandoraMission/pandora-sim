@@ -5,6 +5,10 @@ import matplotlib.pyplot as plt
 from . import PACKAGEDIR
 '''Generic PSF class'''
 
+class OutOfBoundsError(Exception):
+    """A point is out of bounds for this PSF"""
+    pass
+
 class PSF(object):
     """A visible PSF object..."""
     def __init__(self, filename=f"{PACKAGEDIR}/data/pandora_vis_20220506.fits"):
@@ -54,14 +58,14 @@ class PSF(object):
         """Check a given point has the right shape, units and values in bounds"""
         # Check length
         if len(point) != self.ndims:
-            raise ValueError(f"Must pass {self.ndims}D point: ({', '.join(self.dimension_names)})")
+            raise OutOfBoundsError(f"Must pass {self.ndims}D point: ({', '.join(self.dimension_names)})")
         # Check units
         point = tuple([u.Quantity(p, self.dimension_units[dim]) for dim, p in enumerate(point)])
         # Check in bounds
         for dim, p in enumerate(point):
             lp = getattr(self, self.dimension_names[dim])
             if (p < lp.min()) | (p > lp.max()):
-                raise ValueError(f'Point ({p}) out of {self.dimension_names[dim]} bounds.')            
+                raise OutOfBoundsError(f'Point ({p}) out of {self.dimension_names[dim]} bounds.')            
         return point
         
     def psf(self, point, freeze_dimensions=None):

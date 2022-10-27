@@ -6,6 +6,7 @@ import pandas as pd
 
 from . import PACKAGEDIR
 from .detector import Detector
+from .psf import OutOfBoundsError
 
 
 class NIRDetector(Detector):
@@ -98,6 +99,8 @@ class NIRDetector(Detector):
         wav_edges = self.pixel_to_wavelength(pix_edges * u.pixel)
         # Iterate every pixel, integrate the SED
         for pdx in range(len(pix)):
+            if ~np.isfinite(wav[pdx]):
+                continue
             # Find the value in each pixel
             k = (wavelength > wav_edges[pdx][0]) & (wavelength < wav_edges[pdx][1])
             wp = np.hstack(
@@ -116,9 +119,13 @@ class NIRDetector(Detector):
             ).to(u.electron / u.s)
 
             # Build the PRF at this wavelength
-            x, y, prf = self._bin_prf(wavelength=wav[pdx], center=(pix[pdx], 0))
+#            x, y, prf = self._bin_prf(wavelength=wav[pdx], center=(pix[pdx], 0))
+            try:
+                x, y, prf = self.psf.prf([wav[pdx]], location=(pix[pdx], 0))
+            except OutOfBoundsError:
+                continue
             # Assign to each pixel
-            X, Y = np.meshgrid(x + xc, y + yc)
+            Y, X = np.meshgrid(y + yc, x + xc)
             k = (X > 0) & (Y > 0) & (X < ar.shape[1]) & (Y < ar.shape[0])
             ar[Y[k], X[k]] += np.nan_to_num(prf[k] * integral.value)
         ar *= u.electron / u.second
