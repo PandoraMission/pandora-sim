@@ -5,6 +5,7 @@ nav:
       - PandoraSat: pandorasat.md
       - NIRDA : irdetector.md
       - VISDA : visibledetector.md
+      - PSF : psf.md
       - Optics : optics.md
       - Orbit : orbit.md
     - Notebooks:

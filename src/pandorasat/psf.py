@@ -1,3 +1,4 @@
+"""Work with Point Spread Functions"""
 import astropy.units as u
 from astropy.io import fits
 import numpy as np
@@ -5,18 +6,18 @@ import matplotlib.pyplot as plt
 from . import PACKAGEDIR
 '''Generic PSF class'''
 
-class OutOfBoundsError(Exception):
-    """A point is out of bounds for this PSF"""
-    pass
-
 class PSF(object):
-    """A visible PSF object..."""
+    """Class to use PSFs"""
     def __init__(self, filename=f"{PACKAGEDIR}/data/pandora_vis_20220506.fits"):
-        """Generic PSF class. Takes in a PSF cube fits file. 
+        """PSF class. Takes in a PSF cube fits file. 
+
+        This class will let you use an N dimensional PSF fits file, and will let you 
+        calculate a PRF (pixel response function) at any point in the N dimensions.
+        The PRF is the PSF evaluated on a pixel grid. 
         
         filename: str
             Filename of PSF fits file. PSF cube must have a shape such that the first
-            two dimensions are the x and y extent of the PSF.
+            two dimensions are the x and y extent of the PSF. Defaults to visible PSF.
         """
         self.filename = filename
         hdu = fits.open(filename)
@@ -69,14 +70,17 @@ class PSF(object):
         return point
         
     def psf(self, point, freeze_dimensions=None):
-        """Interpolate the PSF to a particular point
+        """Interpolate the PSF cube to a particular point
         
         Parameters
         ----------
+        point: tuple   
+            The point in ndimensions to evaluate the PSF at. Use `self.dimension_names`
+            to see what your dimensions are.
 
         Returns
         -------
-        psf : np.ndarray of shape self.size
+        psf : np.ndarray of shape self.shape
             The interpolated PSF 
         """
         if not isinstance(point, (list, tuple)):
@@ -110,10 +114,10 @@ class PSF(object):
         
         Parameters
         ----------
-        location: tuple
-            The location in pixels on the detector. 
         point: tuple
-            The point to interpolate at, in self.dimension_names
+            The point to interpolate at, in `self.dimension_names`
+        location: tuple
+            The location in pixels on the detector. Must be two pixel values.
         freeze_dimensions: None, int, str or list
             Pass a list with the dimensions you want to "freeze", i.e. set the PSF shape to the midpoint value.
             Freezing a dimension will make this calculation faster, as it won't be interpolated. You can pass
@@ -152,13 +156,30 @@ class PSF(object):
         return f"{self.ndims}D PSF Model [{', '.join(self.dimension_names)}]"
 
 def interpfunc(l, lp, PSF0):
-            if l in lp:
-                PSF1 = PSF0[:, :, np.where(lp == l)[0][0]]
-            else:
-                # Find the two closest frames
-                d = np.argsort(np.abs(lp - l))[:2]
-                d = d[np.argsort(lp[d])]
-                # Linearly interpolate
-                slope = (PSF0[:, :, d[0]] - PSF0[:, :, d[1]]) / (lp[d[0]] - lp[d[1]])
-                PSF1 = PSF0[:, :, d[1]] + (slope * (l - lp[d[1]]))
-            return PSF1
+    """Interpolation function to interpolate the last dimension of a cube.
+    
+    Use this function recursively to interpolate a multi-dimensional cube.
+
+    Parameters
+    ----------
+    l : float
+        The value at which to interpolate the cube
+    lp : 1D np.ndarray of floats
+        The values of the last dimension of the cube.
+    PSF0: ND np.ndarray of floats
+        The data cube
+    """
+    if l in lp:
+        PSF1 = PSF0[:, :, np.where(lp == l)[0][0]]
+    else:
+        # Find the two closest frames
+        d = np.argsort(np.abs(lp - l))[:2]
+        d = d[np.argsort(lp[d])]
+        # Linearly interpolate
+        slope = (PSF0[:, :, d[0]] - PSF0[:, :, d[1]]) / (lp[d[0]] - lp[d[1]])
+        PSF1 = PSF0[:, :, d[1]] + (slope * (l - lp[d[1]]))
+    return PSF1
+
+class OutOfBoundsError(Exception):
+    """Exception raised if a point is out of bounds for this PSF"""
+    pass
