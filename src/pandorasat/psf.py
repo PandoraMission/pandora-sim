@@ -11,7 +11,7 @@ from . import PACKAGEDIR
 class PSF(object):
     """Class to use PSFs"""
 
-    def __init__(self, filename=f"{PACKAGEDIR}/data/pandora_vis_20220506.fits"):
+    def __init__(self, filename=f"{PACKAGEDIR}/data/pandora_vis_20220506.fits", transpose=False):
         """PSF class. Takes in a PSF cube fits file.
 
         This class will let you use an N dimensional PSF fits file, and will let you
@@ -21,11 +21,19 @@ class PSF(object):
         filename: str
             Filename of PSF fits file. PSF cube must have a shape such that the first
             two dimensions are the x and y extent of the PSF. Defaults to visible PSF.
+        transpose: bool
+            Transpose the input file, i.e. rotate 90 degrees
         """
         self.filename = filename
         hdu = fits.open(filename)
         self.pixel_size = hdu[0].header["PIXSIZE"] * u.micron / u.pix
         self.psf_flux = hdu[1].data
+        # I think this makes it the right way round
+        self.psf_flux = self.psf_flux.transpose([1, 0, *np.arange(2, self.psf_flux.ndim)])
+        # Testing
+        self.psf_flux = self.psf_flux[:, :-10]
+        if transpose:
+            self.psf_flux = self.psf_flux.transpose([1, 0, *np.arange(2, self.psf_flux.ndim)])
         self.shape = self.psf_flux.shape[:2]
         self.sub_pixel_size = hdu[0].header["SUBPIXSZ"] * u.micron / u.pix
 
@@ -178,40 +186,28 @@ class PSF(object):
         ybin = np.unique(cyc)
         psf2 = np.asarray(
             [psf1[:, cyc == c].sum(axis=1) / (cyc == c).sum() for c in ybin]
-        )
+        ).T
         # We need to renormalize psf2 here
-        psf2 /= np.trapz(np.trapz(psf2, xbin, axis=1), ybin)
+        psf2 /= np.trapz(np.trapz(psf2, ybin, axis=1), xbin)
 
-        return xbin.astype(int), ybin.astype(int), psf2.T
+        return xbin.astype(int), ybin.astype(int), psf2
 
     def __repr__(self):
         return f"{self.ndims}D PSF Model [{', '.join(self.dimension_names)}]"
 
 
+
 def interpfunc(l, lp, PSF0):
-    """Interpolation function to interpolate the last dimension of a cube.
-
-    Use this function recursively to interpolate a multi-dimensional cube.
-
-    Parameters
-    ----------
-    l : float
-        The value at which to interpolate the cube
-    lp : 1D np.ndarray of floats
-        The values of the last dimension of the cube.
-    PSF0: ND np.ndarray of floats
-        The data cube
-    """
-    if l in lp:
-        PSF1 = PSF0[:, :, np.where(lp == l)[0][0]]
-    else:
-        # Find the two closest frames
-        d = np.argsort(np.abs(lp - l))[:2]
-        d = d[np.argsort(lp[d])]
-        # Linearly interpolate
-        slope = (PSF0[:, :, d[0]] - PSF0[:, :, d[1]]) / (lp[d[0]] - lp[d[1]])
-        PSF1 = PSF0[:, :, d[1]] + (slope * (l - lp[d[1]]))
-    return PSF1
+            if l in lp:
+                PSF1 = PSF0[:, :, np.where(lp == l)[0][0]]
+            else:
+                # Find the two closest frames
+                d = np.argsort(np.abs(lp - l))[:2]
+                d = d[np.argsort(lp[d])]
+                # Linearly interpolate
+                slope = (PSF0[:, :, d[0]] - PSF0[:, :, d[1]]) / (lp[d[0]] - lp[d[1]])
+                PSF1 = PSF0[:, :, d[1]] + (slope * (l - lp[d[1]]))
+            return PSF1
 
 
 class OutOfBoundsError(Exception):

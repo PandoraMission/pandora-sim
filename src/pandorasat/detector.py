@@ -28,6 +28,8 @@ class Detector(abc.ABC):
         The pixel size in microns/mm
     gain: float, optional
         The gain in electrons per data unit
+    transpose_psf : bool
+        Transpose the LLNL input PSF file, i.e. rotate 90 degrees
     """
 
     # Detector Properties
@@ -37,14 +39,15 @@ class Detector(abc.ABC):
     naxis1: int
     naxis2: int
     gain: float = 2.0 * u.electron / u.DN
+    transpose_psf: bool = False
 
     def __post_init__(self):
         if self.name.lower() in ["visda", "vis", "visible", "v"]:
             #    self.psf_fname = f"{PACKAGEDIR}/data/Pandora_vis.fits"
-            self.psf = PSF(f"{PACKAGEDIR}/data/Pandora_vis_20220506.fits")
+            self.psf = PSF(f"{PACKAGEDIR}/data/Pandora_vis_20220506.fits", transpose=self.transpose_psf)
         elif self.name.lower() in ["nirda", "nir", "ir"]:
             #    self.psf_fname = f"{PACKAGEDIR}/data/Pandora_nir.fits"
-            self.psf = PSF(f"{PACKAGEDIR}/data/Pandora_nir_20220506.fits")
+            self.psf = PSF(f"{PACKAGEDIR}/data/Pandora_nir_20220506.fits", transpose=self.transpose_psf)
         else:
             raise ValueError(f"No such detector as {self.name}")
         #        self._get_psf()

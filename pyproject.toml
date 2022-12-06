@@ -13,9 +13,11 @@ scipy = "^1.8.1"
 tqdm = "^4.64.0"
 pysynphot = ">=2.0.0"
 astroquery = "^0.4.6"
+numba = "^0.56.3"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
+ipython = "^8.6.0"
 flake8 = "^4.0.1"
 black = "^22.3.0"
 isort = "^5.10.1"

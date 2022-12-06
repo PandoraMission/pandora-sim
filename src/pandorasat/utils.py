@@ -1,9 +1,75 @@
+import sys
+import os
+import time
+import re
+import json
+import pandas as pd
+import requests
+from urllib.parse import quote as urlencode    
 import astropy.units as u
 import numpy as np
 from astropy.constants import c, h
 from astropy.convolution import Gaussian1DKernel, convolve
 
 from . import PACKAGEDIR
+
+def mast_query(request):
+    """Perform a MAST query.
+    
+        Parameters
+        ----------
+        request (dictionary): The MAST request json object
+        
+        Returns head,content where head is the response HTTP headers, and content is the returned data"""
+    
+    # Base API url
+    request_url='https://mast.stsci.edu/api/v0/invoke'    
+    
+    # Grab Python Version 
+    version = ".".join(map(str, sys.version_info[:3]))
+ 
+    # Create Http Header Variables
+    headers = {"Content-type": "application/x-www-form-urlencoded",
+               "Accept": "text/plain",
+               "User-agent":"python-requests/"+version}
+ 
+    # Encoding the request as a json string
+    req_string = json.dumps(request)
+    req_string = urlencode(req_string)
+    
+    # Perform the HTTP request
+    resp = requests.post(request_url, data="request="+req_string, headers=headers)
+    
+    # Pull out the headers and response content
+    head = resp.headers
+    content = resp.content.decode('utf-8')
+ 
+    return head, content
+
+def get_sky_catalog(ra=210.8023, dec=54.349, radius=0.155, magnitude_range=(-3, 16), columns="ra, dec, gaiabp"):
+    """We use this instead of astroquery so we can query based on magnitude filters, and reduce the columns
+    
+    See documentation at:
+    https://mast.stsci.edu/api/v0/_services.html
+    https://mast.stsci.edu/api/v0/pyex.html#MastCatalogsFilteredTicPy
+    https://mast.stsci.edu/api/v0/_t_i_cfields.html
+    """
+    request = {"service":"Mast.Catalogs.Filtered.Tic.Position.Rows",
+               "format":"json",
+               "params":{
+                   "columns":columns,
+                   "filters":[
+                       {"paramName":"gaiabp",
+                        "values":[{"min":magnitude_range[0],"max":magnitude_range[1]}]}],
+                   "ra": ra,
+                   "dec": dec,
+                   "radius": radius
+               }}
+ 
+    headers, out_string = mast_query(request)
+    out_data = json.loads(out_string)
+ 
+    return pd.DataFrame.from_dict(out_data['data'])
 
 
 def photon_energy(wavelength):

@@ -3,6 +3,9 @@
 import astropy.units as u
 import numpy as np
 import pandas as pd
+from astropy.io import fits
+import warnings
+from astropy.wcs import WCS
 
 from . import PACKAGEDIR
 from .detector import Detector
@@ -64,12 +67,34 @@ class NIRDetector(Detector):
     def throughput(self, wavelength):
         return wavelength.value**0 * 0.61
 
+    def wcs(self, target_ra, target_dec):
+            # This is where we'd build or use a WCS.
+            # Here we're assuming no distortions, no rotations.
+            hdu = fits.PrimaryHDU()
+            hdu.header['CTYPE1'] = 'RA---TAN'
+            hdu.header['CTYPE2'] = 'DEC--TAN'
+            hdu.header['CRVAL1'] = target_ra
+            hdu.header['CRVAL2'] = target_dec
+            hdu.header['CRPIX1'] = 2048 - 1024 + 40# + 0.5
+            hdu.header['CRPIX2'] = 2048# - 0.5
+            hdu.header['NAXIS1'] = self.naxis1.value
+            hdu.header['NAXIS2'] = self.naxis2.value
+            hdu.header['CDELT1'] = -self.pixel_scale.to(u.deg/u.pixel).value
+            hdu.header['CDELT2'] = self.pixel_scale.to(u.deg/u.pixel).value
+            ## We're not doing any rotation and scaling right now... but those go in PC1_1, PC1_2, PC1_2, PC2_2
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                wcs = WCS(hdu.header)
+            return wcs
+
     def get_trace(
         self,
         target,
         pixel_resolution=2,
         subarray_size=(40, 300),
         target_center=(20, 200),
+        temperature=-10*u.deg_C
+        
     ):
         """Calculates the electrons per second from a source in a subarray
 
@@ -121,7 +146,7 @@ class NIRDetector(Detector):
             # Build the PRF at this wavelength
             #            x, y, prf = self._bin_prf(wavelength=wav[pdx], center=(pix[pdx], 0))
             try:
-                x, y, prf = self.psf.prf([wav[pdx]], location=(pix[pdx], 0))
+                x, y, prf = self.psf.prf([wav[pdx], temperature], location=(pix[pdx], 0))
             except OutOfBoundsError:
                 continue
             # Assign to each pixel
