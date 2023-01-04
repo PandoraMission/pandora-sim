@@ -14,6 +14,8 @@ tqdm = "^4.64.0"
 pysynphot = ">=2.0.0"
 astroquery = "^0.4.6"
 numba = "^0.56.3"
+black = "^22.12.0"
+starry = "^1.2.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"

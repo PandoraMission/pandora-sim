@@ -90,7 +90,7 @@ class PandoraSat:
                                         columns=['ra', 'dec', 'mag', 'vis_x', 'vis_y', 'nir_x', 'nir_y', 'vis_counts', 'vis_flux'])
         return source_catalog
 
-    def get_sky_image(self, source_catalog, wavelength=0.54*u.micron, temperature=10*u.deg_C, nreads=1):
+    def get_sky_image(self, source_catalog, wavelength=0.54*u.micron, temperature=10*u.deg_C, nreads=1, include_noise=True):
         science_image = np.zeros(
             (self.VISDA.naxis1.value.astype(int), self.VISDA.naxis2.value.astype(int))
         )
@@ -99,29 +99,30 @@ class PandoraSat:
             if ((x < -650) | (x > 650) | (y < -650) | (y > 650)):
                 continue
             x1, y1, f = self.VISDA.psf.prf(
-                (y * u.pix, x * u.pix, wavelength, temperature)
+                (x * u.pix, y * u.pix, wavelength, temperature)
             )
             X, Y = np.asarray(np.meshgrid(x1 + self.VISDA.naxis1.value//2, y1 + self.VISDA.naxis2.value//2)).astype(int)
             science_image[Y, X] += f.T * s.vis_counts
 
         
         science_image *= u.electron/u.second
-        # # background light?
-        science_image += self.VISDA.get_background_light_estimate(source_catalog.loc[0, 'ra'], source_catalog.loc[0, 'dec'])
+        if include_noise:
+            # # background light?
+            science_image += self.VISDA.get_background_light_estimate(source_catalog.loc[0, 'ra'], source_catalog.loc[0, 'dec'])
 
-        # time integrate
-        science_image *= self.VISDA.integration_time * nreads
+            # time integrate
+            science_image *= self.VISDA.integration_time * nreads
 
-        # fieldstop
-        f = np.hypot(*(np.mgrid[:self.VISDA.naxis1.value.astype(int), :self.VISDA.naxis2.value.astype(int)] - np.hstack([self.VISDA.naxis1.value.astype(int), self.VISDA.naxis2.value.astype(int)])[:, None, None]/2))
-        f = (f < ((0.15*u.deg)/self.VISDA.pixel_scale).to(u.pix).value).astype(float)
-        science_image *= f
+            # fieldstop
+            f = np.hypot(*(np.mgrid[:self.VISDA.naxis1.value.astype(int), :self.VISDA.naxis2.value.astype(int)] - np.hstack([self.VISDA.naxis1.value.astype(int), self.VISDA.naxis2.value.astype(int)])[:, None, None]/2))
+            f = (f < ((0.15*u.deg)/self.VISDA.pixel_scale).to(u.pix).value).astype(float)
+            science_image *= f
 
-        # noise
-        noise = np.random.normal(loc=self.VISDA.bias.value, scale=self.VISDA.read_noise.value * np.sqrt(nreads),
-                                 size=(self.VISDA.naxis1.value.astype(int), self.VISDA.naxis2.value.astype(int))) * u.electron
-        noise += np.random.poisson(lam=(self.VISDA.dark * self.VISDA.integration_time * nreads).value,
-                                   size=(self.VISDA.naxis1.value.astype(int), self.VISDA.naxis2.value.astype(int))) * u.electron
+            # noise
+            noise = np.random.normal(loc=self.VISDA.bias.value, scale=self.VISDA.read_noise.value * np.sqrt(nreads),
+                                    size=(self.VISDA.naxis1.value.astype(int), self.VISDA.naxis2.value.astype(int))) * u.electron
+            noise += np.random.poisson(lam=(self.VISDA.dark * self.VISDA.integration_time * nreads).value,
+                                    size=(self.VISDA.naxis1.value.astype(int), self.VISDA.naxis2.value.astype(int))) * u.electron
 
-        science_image += noise
+            science_image += noise
         return science_image

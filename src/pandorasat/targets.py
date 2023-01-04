@@ -8,10 +8,12 @@ import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
 from astropy.constants import c
+from astropy.coordinates import SkyCoord
 from astropy.io import votable
 from astropy.modeling import models
 from astropy.utils.data import download_file
 from astroquery.vizier import Vizier
+from astroquery.ipac.nexsci.nasa_exoplanet_archive import NasaExoplanetArchive
 
 from . import PACKAGEDIR
 
@@ -27,6 +29,38 @@ with warnings.catch_warnings():
 class Target(object):
     name: str
 
+    def __post_init__(self):
+        key_dict = {"Tmag":"tmag", "RAJ2000":"ra", "DEJ2000":"dec", "Teff":"teff", "logg":"logg", "Jmag":"jmag"}
+        viz_dat = np.asarray(
+            Vizier(columns=list(key_dict.keys()))
+            .query_object(self.name, catalog="IV/39/tic82", radius=0.1*u.arcsecond)[
+                0
+            ][list(key_dict.keys())]
+            .to_pandas()
+            .iloc[0]
+        )
+        [setattr(self, key_dict[k], viz_dat[idx]) for idx, k in enumerate(key_dict)]
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            planets_tab = NasaExoplanetArchive.query_region(
+                table="pscomppars", coordinates=SkyCoord(ra=self.ra * u.deg, dec=self.dec * u.deg),
+                radius=5 * u.arcsecond) 
+            if len(planets_tab) != 0:
+                attrs = ['pl_orbper', 'pl_tranmid', 'pl_trandur', 'pl_trandep']
+                self.planets = {letter:{attr:planets_tab[planets_tab['pl_letter'] == letter][attr][0].unmasked for attr in attrs} for letter in planets_tab['pl_letter']}
+                # There's an error in the NASA exoplanet archive units that makes duration "days" instead of "hours"
+                for planet in self.planets:
+                    self.planets[planet]['pl_trandur'] = self.planets[planet]['pl_trandur'].value * u.hour 
+
+    def box_transit(self, time):
+        lc = np.zeros_like(time)
+        for planet in self.planets:
+            phase = ((time - self.planets[planet]['pl_tranmid'].to(u.day).value) % self.planets[planet]['pl_orbper'].to(u.day).value)
+            mask = (phase < self.planets[planet]['pl_trandur'].to(u.day).value/2) | (phase > (self.planets[planet]['pl_orbper'].to(u.day).value - self.planets[planet]['pl_trandur'].to(u.day).value/2))
+            lc += -np.nan_to_num(mask.astype(float) * (self.planets[planet]['pl_trandep'].value/100))
+        return lc + 1
+        
     def from_vizier(self, radius=2):
         vizier_url = f"https://vizier.cds.unistra.fr/viz-bin/sed?-c={self.name.replace(' ', '%20')}&-c.rs={radius}"
         df = (
@@ -61,26 +95,17 @@ class Target(object):
         self.model_type = "sed_fit"
         return self
 
-    def from_phoenix(self, teff=None, logg=None, Jmag=None):
+    def from_phoenix(self, teff=None, logg=None, jmag=None):
 
-        # Get data from TIC
-        viz_dat = np.asarray(
-            Vizier(columns=["Teff", "logg", "Jmag"])
-            .query_object(self.name, catalog="IV/39/tic82", radius=0.1 * u.arcsecond)[
-                0
-            ]["Teff", "logg", "Jmag"]
-            .to_pandas()
-            .iloc[0]
-        )
-        if teff is None:
-            teff = viz_dat[0]
-        if logg is None:
-            logg = viz_dat[1]
-        if Jmag is None:
-            Jmag = viz_dat[2]
+        if teff is not None:
+            self.teff = teff
+        if logg is not None:
+            self.logg = logg
+        if jmag is not None:
+            self.jmag = jmag
 
-        star = pysynphot.Icat("phoenix", teff, 0.0, logg)
-        star_norm = star.renorm(Jmag, "vegamag", pysynphot.ObsBandpass("johnson,j"))
+        star = pysynphot.Icat("phoenix", self.teff, 0.0, self.logg)
+        star_norm = star.renorm(self.jmag, "vegamag", pysynphot.ObsBandpass("johnson,j"))
         star_norm.convert("Micron")
         star_norm.convert("flam")
 
@@ -151,8 +176,10 @@ class Target(object):
         #     )
         #     / u.sr
         # )
-
-        temperatures = np.linspace(1000, 10000, 100)
+        if np.isfinite(self.teff):
+            temperatures = np.linspace(self.teff - 300, self.teff + 300, 100)            
+        else:
+            temperatures = np.linspace(1000, 10000, 100)
         chi2 = np.zeros_like(temperatures)
         for count in range(4):
             for idx, temperature in enumerate(temperatures):

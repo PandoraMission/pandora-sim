@@ -69,7 +69,9 @@ def get_sky_catalog(ra=210.8023, dec=54.349, radius=0.155, magnitude_range=(-3, 
     headers, out_string = mast_query(request)
     out_data = json.loads(out_string)
  
-    return pd.DataFrame.from_dict(out_data['data'])
+    df = pd.DataFrame.from_dict(out_data['data'])
+    s = np.argsort(np.hypot(np.asarray(df.ra) - ra, np.asarray(df.dec) - dec))
+    return df.loc[s].reset_index(drop=True)
 
 
 def photon_energy(wavelength):
@@ -131,21 +133,23 @@ def wavelength_to_rgb(wavelength, gamma=0.8):
     return np.asarray((int(R), int(G), int(B))) / 256
 
 
-def get_jitter(xstd=4, ystd=1.5, tstd=3, nsubtimes=50, seed=42):
+def get_jitter(xstd=1, ystd=0.3, tstd=5, nframes=20, seed=None):
     """Returns the jitter inside a cadence
 
     This is a dumb placeholder function.
     """
-    np.random.seed(seed)
+    if seed is not None:
+        np.random.seed(seed)
     jitter_x = (
-        convolve(np.random.normal(0, xstd, size=nsubtimes), Gaussian1DKernel(tstd))
+        convolve(np.random.normal(0, xstd, size=nframes), Gaussian1DKernel(tstd))
         * tstd**0.5
         * xstd**0.5
     )
-    np.random.seed(seed + 1)
+    if seed is not None:
+        np.random.seed(seed + 1)
     jitter_y = (
         convolve(
-            np.random.normal(0, ystd, size=nsubtimes),
+            np.random.normal(0, ystd, size=nframes),
             Gaussian1DKernel(tstd),
         )
         * tstd**0.5

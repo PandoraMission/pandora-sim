@@ -1,6 +1,8 @@
 """Holds metadata and methods on Pandora NIRDA"""
 
 import astropy.units as u
+from tqdm import tqdm
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from astropy.io import fits
@@ -10,12 +12,41 @@ from astropy.wcs import WCS
 from . import PACKAGEDIR
 from .detector import Detector
 from .psf import OutOfBoundsError
+from .utils import get_jitter
 
 
 class NIRDetector(Detector):
     @property
     def _dispersion_df(self):
         return pd.read_csv(f"{PACKAGEDIR}/data/pixel_vs_wavelength.csv")
+
+    @property
+    def subarray_size(self):
+        return (80, 400)
+
+    @property
+    def pixel_read_time(self):
+        return 1e-5*u.second/u.pixel
+
+    @property
+    def frame_time(self):
+        return np.product(self.subarray_size) * u.pixel * self.pixel_read_time
+
+    @property
+    def dark(self):
+        return 1 * u.electron / u.second
+
+    @property
+    def read_noise(self):
+        raise ValueError("Not Set")
+    
+    @property
+    def saturation_limit(self):
+        raise ValueError("Not Set")
+
+    @property
+    def non_linearity(self):
+        raise ValueError("Not Set")
 
     def qe(self, wavelength):
         """
@@ -87,12 +118,40 @@ class NIRDetector(Detector):
                 wcs = WCS(hdu.header)
             return wcs
 
+    def diagnose(self, n=4, npixels=20, image_type='psf', temperature = 10*u.deg_C):
+        wavs = np.linspace(self.psf.wavelength1d.min(), self.psf.wavelength1d.max(), n**2)
+        m = npixels // 2
+        fig, ax = plt.subplots(n, n, figsize=(n*2 + 2, n*2), sharex=True, sharey=True, facecolor='white')
+        for ndx in np.arange(n**2):
+            jdx = ndx % n
+            idx = (ndx - jdx)//n
+            if image_type.lower() == 'psf':
+                x, y, f = self.psf.psf_x.value, self.psf.psf_y.value, self.psf.psf([wavs[ndx], temperature])
+                ax[idx, jdx].set(xticklabels=[], yticklabels=[])
+            elif image_type.lower() == 'prf':
+                x, y, f = self.psf.prf([wavs[ndx], temperature], location=[0, 0])
+            im = ax[idx, jdx].pcolormesh(x, y, f.T, vmin=0, vmax=[0.1 if image_type.lower() == 'prf' else 0.01][0])
+            ax[idx, jdx].set(xlim=(-m, m), ylim=(-m, m),
+                xticks=np.arange(-(m - 1), m, 2),
+                yticks=np.arange(-(m - 1), m, 2),
+                title=f"{wavs[ndx]:0.2} $\mu$m")
+            ax[idx, jdx].grid(True, ls='-', color='white', lw=0.5, alpha=0.5)
+            plt.subplots_adjust(wspace=0, hspace=0.2)
+        for jdx in range(n):
+            ax[n - 1, jdx].set(xlabel="Pixels")
+        for idx in range(n):
+            ax[idx, 0].set(ylabel="Pixels")
+        cbar = plt.colorbar(im, ax=ax)
+        cbar.set_label("Normalized PSF Value")
+        fig.suptitle(f"NIRDA {image_type.upper()} Across Wavelength", fontsize=15)
+        return fig
+
     def get_trace(
         self,
-        target,
+        wavelength,
+        spectrum,
         pixel_resolution=2,
-        subarray_size=(40, 300),
-        target_center=(20, 200),
+        target_center=(40, 250),
         temperature=-10*u.deg_C
         
     ):
@@ -105,19 +164,17 @@ class NIRDetector(Detector):
         pixel_resolution: float
             The number of subpixels to use when building the trace.
             Higher numbers will take longer to calculate.
-        subarray_size: Tuple
-            Size of the subarray to calculate
         target_center: tuple
             Center of the target within the subarray.
         """
         dp = 1 / pixel_resolution
         pix = np.arange(-200, 100, dp) + dp / 2
         wav = self.pixel_to_wavelength(pix * u.pixel)
-        ar = np.zeros(subarray_size)
+        if not (np.nanmin(np.diff(wav)).to(u.micron).value > np.nanmin(np.diff(wavelength)).to(u.micron).value):
+            raise ValueError("Model spectrum must be higher resolution.") 
+        ar = np.zeros(self.subarray_size)
         yc, xc = target_center
 
-        wavelength = np.linspace(0.1, 2, 2000) * u.micron
-        sed = target.model_spectrum(wavelength)
         sensitivity = self.sensitivity(wavelength)
 
         pix_edges = np.vstack([pix - dp / 2, pix + dp / 2]).T
@@ -135,7 +192,7 @@ class NIRDetector(Detector):
                     wav_edges[pdx][1] - 1e-10 * u.AA,
                 ]
             )
-            sp = np.interp(wp, wavelength, sed * sensitivity)
+            sp = np.interp(wp, wavelength, spectrum * sensitivity)
             integral = (
                 np.trapz(
                     np.hstack([0, sp, 0]),
@@ -146,12 +203,59 @@ class NIRDetector(Detector):
             # Build the PRF at this wavelength
             #            x, y, prf = self._bin_prf(wavelength=wav[pdx], center=(pix[pdx], 0))
             try:
-                x, y, prf = self.psf.prf([wav[pdx], temperature], location=(pix[pdx], 0))
+                x, y, prf = self.psf.prf([wav[pdx], temperature], location=(pix[pdx] + xc, yc))
             except OutOfBoundsError:
                 continue
             # Assign to each pixel
-            Y, X = np.meshgrid(y + yc, x + xc)
+            Y, X = np.meshgrid(y, x)
             k = (X > 0) & (Y > 0) & (X < ar.shape[1]) & (Y < ar.shape[0])
             ar[Y[k], X[k]] += np.nan_to_num(prf[k] * integral.value)
         ar *= u.electron / u.second
         return ar
+
+    def get_frames(
+            self,
+            wavelength,
+            spectrum,
+            nframes=20,
+            target_center=(40, 250),
+            pixel_resolution=2,
+            temperature=-10*u.deg_C,
+            seed=None,
+        ):
+            """Calculates the frames  from a source in a subarray
+
+            Parameters
+            ----------
+            pixel_resolution: float
+                The number of subpixels to use when building the trace.
+                Higher numbers will take longer to calculate.
+            target_center: tuple
+                Center of the target within the subarray.
+            """
+            x1, y1 = np.asarray(get_jitter(nframes=nframes, seed=seed))
+            traces = np.asarray([self.get_trace(wavelength, spectrum,
+                                target_center=[target_center[0] + y1[idx], target_center[1] + x1[idx]], 
+                                temperature=temperature, pixel_resolution=pixel_resolution) 
+                                for idx in tqdm(range(nframes), leave=True, position=0)]) * u.electron / u.second
+            traces *= self.frame_time
+            dark_noise = np.asarray([np.random.poisson(lam=(self.dark * self.frame_time * idx).value,
+                        size=self.subarray_size) * u.electron for idx in range(nframes)]) * u.electron
+            return np.cumsum(traces, axis=0) + dark_noise
+
+    def get_integration(self,
+            wavelength,
+            spectrum,
+            nframes,
+            target_center=(40, 250),
+            pixel_resolution=2,
+            temperature=-10*u.deg_C,
+            seed=None,
+        ):
+        if nframes < 8:
+            raise ValueError("Too few frames to do Fowler sampling.")
+        frames = self.get_frames(wavelength, spectrum, nframes=nframes, target_center=target_center, pixel_resolution=pixel_resolution, temperature=temperature, seed=seed)
+
+        # Fowler sampling
+        integration = frames[-4:].mean(axis=0) - frames[:4].mean(axis=0)
+        return integration
