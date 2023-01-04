@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 import astropy.units as u
 import numpy as np
+import pandas as pd
 
 from . import PACKAGEDIR
 from .optics import Optics
@@ -48,6 +49,18 @@ class Detector(abc.ABC):
         elif self.name.lower() in ["nirda", "nir", "ir"]:
             #    self.psf_fname = f"{PACKAGEDIR}/data/Pandora_nir.fits"
             self.psf = PSF(f"{PACKAGEDIR}/data/Pandora_nir_20220506.fits", transpose=self.transpose_psf)
+        elif self.name.lower() in ["uv"]:
+            df = pd.read_csv(f"{PACKAGEDIR}/data/Pandora.Pandora.Visible_UV_Option2.csv")
+            self.qe_wav, self.qe_transmission = np.asarray(df.Wavelength) * u.nm, np.asarray(
+                df.Transmission
+                )
+            df = pd.read_csv(f"{PACKAGEDIR}/data/aluminium_coating.csv")
+            self.throughput_wav, self.throughput_reflectance = np.asarray(df.Wavelength) * u.nm, np.asarray(
+                df.Reflectance
+                )
+
+            #    self.psf_fname = f"{PACKAGEDIR}/data/Pandora_nir.fits"
+            self.psf = PSF(f"{PACKAGEDIR}/data/Pandora_vis_20220506.fits", transpose=self.transpose_psf)
         else:
             raise ValueError(f"No such detector as {self.name}")
         #        self._get_psf()
