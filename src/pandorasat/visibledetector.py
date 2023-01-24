@@ -59,6 +59,10 @@ class VisibleDetector(Detector):
     def integration_time(self):
         return 0.2 * u.second
 
+    @property
+    def fieldstop_radius(self):
+        return 0.15*u.deg
+
     def throughput(self, wavelength):
         return wavelength.value**0 * 0.816
 
@@ -184,12 +188,12 @@ class VisibleDetector(Detector):
     #     science_image += noise
     #     return science_image
 
-
     def get_background_light_estimate(self, ra, dec):
         """Placeholder, will estimate the background light at different locations?"""
-        return np.random.poisson(lam=10,
-                                   size=(self.naxis1.value.astype(int), self.naxis2.value.astype(int)
-                                   )) * u.electron/u.second
+        bkg = np.zeros(self.shape, int)
+        bkg[self.fieldstop] = np.random.poisson(lam=10,
+                                   size=self.fieldstop.sum())
+        return bkg * u.electron/u.second
 
 
 

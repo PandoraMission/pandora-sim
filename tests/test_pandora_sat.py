@@ -24,13 +24,17 @@ def test_trace():
     t = Target("GJ 436").from_vizier()
     t = Target("GJ 436").from_phoenix()
     nirda = PandoraSat.NIRDA
-    nirda.get_trace(t, 2, target_center=(20, 200))
+    wavelength = np.linspace(0.1, 2, 6000) * u.micron
+    spectrum = t.model_spectrum(wavelength)
+    #nirda.get_trace(t, 2, target_center=(20, 200))
+    
+    nirda.get_trace(wavelength, spectrum.value**0 * spectrum.unit, target_center=[40, 250])
     return
 
 
 def test_psf():
     """Test the PSF class"""
-    vPSF = PSF(f"{PACKAGEDIR}/data/pandora_vis_20220506.fits")
+    vPSF = PSF.from_file(f"{PACKAGEDIR}/data/pandora_vis_20220506.fits")
     assert vPSF.ndims == 4
     vPSF.prf(vPSF.midpoint)
     vPSF.prf((600, -600, 0.6, 0))
@@ -39,9 +43,9 @@ def test_psf():
     x, y, prf = vPSF.prf(vPSF.midpoint)
     np.isclose(np.trapz(np.trapz(prf, x, axis=0), y, axis=0), 1, atol=1e-5)
 
-    nirPSF = PSF(f"{PACKAGEDIR}/data/pandora_nir_20220506.fits")
-    assert nirPSF.ndims == 1
+    nirPSF = PSF.from_file(f"{PACKAGEDIR}/data/pandora_nir_20220506.fits")
+    assert nirPSF.ndims == 2
     nirPSF.prf(nirPSF.midpoint, location=(1 * u.pixel, 3 * u.pixel))
-    nirPSF.prf(1, location=(1, 3))
+    nirPSF.prf((1, 10), location=(1, 3))
     x, y, prf = nirPSF.prf(nirPSF.midpoint, location=(0, 0))
     np.isclose(np.trapz(np.trapz(prf, x, axis=0), y, axis=0), 1, atol=1e-5)

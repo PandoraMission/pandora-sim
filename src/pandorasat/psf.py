@@ -11,7 +11,31 @@ from . import PACKAGEDIR
 class PSF(object):
     """Class to use PSFs"""
 
-    def __init__(self, filename=f"{PACKAGEDIR}/data/pandora_vis_20220506.fits", transpose=False):
+    def __init__(self, X, psf_flux, dimension_names, dimension_units, pixel_size, sub_pixel_size, transpose=False):
+        """PSF class. Takes in a PSF cube.
+
+        This class will let you use an N dimensional PSF fits file, and will let you
+        calculate a PRF (pixel response function) at any point in the N dimensions.
+        The PRF is the PSF evaluated on a pixel grid.
+
+
+        """
+        self.psf_flux = psf_flux
+        if transpose:
+            self.psf_flux = self.psf_flux.transpose([1, 0, *np.arange(2, self.psf_flux.ndim)])
+        self.dimension_names = dimension_names
+        self.dimension_units = dimension_units
+        self.pixel_size = pixel_size
+        self.sub_pixel_size = sub_pixel_size
+
+        for name, x in zip(dimension_names, X):
+            setattr(self, name, x)
+
+        self.validate()
+
+
+    @staticmethod
+    def from_file(filename=f"{PACKAGEDIR}/data/pandora_vis_20220506.fits", transpose=False):
         """PSF class. Takes in a PSF cube fits file.
 
         This class will let you use an N dimensional PSF fits file, and will let you
@@ -24,31 +48,54 @@ class PSF(object):
         transpose: bool
             Transpose the input file, i.e. rotate 90 degrees
         """
-        self.filename = filename
         hdu = fits.open(filename)
-        self.pixel_size = hdu[0].header["PIXSIZE"] * u.micron / u.pix
-        self.psf_flux = hdu[1].data
+        pixel_size = hdu[0].header["PIXSIZE"] * u.micron / u.pix
+        psf_flux = hdu[1].data
+
         # I think this makes it the right way round
-        self.psf_flux = self.psf_flux.transpose([1, 0, *np.arange(2, self.psf_flux.ndim)])
-        # Testing
-        self.psf_flux = self.psf_flux[:, :-10]
+        psf_flux = psf_flux.transpose([1, 0, *np.arange(2, psf_flux.ndim)])
+        # # Testing
+        psf_flux = psf_flux[:, :-10]
         if transpose:
-            self.psf_flux = self.psf_flux.transpose([1, 0, *np.arange(2, self.psf_flux.ndim)])
+            psf_flux = psf_flux.transpose([1, 0, *np.arange(2, psf_flux.ndim)])
+        sub_pixel_size = hdu[0].header["SUBPIXSZ"] * u.micron / u.pix
+        dimension_names = [i.name.lower() for i in hdu[2:]]
+        dimension_units = [u.Unit(i.header["UNIT"]) for i in hdu[2:]]
+        X = [i.data * u.Unit(i.header["UNIT"])
+            for i in hdu[2:]
+        ]
+        return PSF(X, psf_flux, dimension_names, dimension_units, pixel_size, sub_pixel_size)
+
+
+
+
+
+    def validate(self):
+        # self.filename = filename
+        # hdu = fits.open(filename)
+        # self.pixel_size = hdu[0].header["PIXSIZE"] * u.micron / u.pix
+        # self.psf_flux = hdu[1].data
+        # # I think this makes it the right way round
+        # self.psf_flux = self.psf_flux.transpose([1, 0, *np.arange(2, self.psf_flux.ndim)])
+        # # Testing
+        # self.psf_flux = self.psf_flux[:, :-10]
+        # if transpose:
+        #     self.psf_flux = self.psf_flux.transpose([1, 0, *np.arange(2, self.psf_flux.ndim)])
+        # self.sub_pixel_size = hdu[0].header["SUBPIXSZ"] * u.micron / u.pix
+        # self.dimension_names = [i.name.lower() for i in hdu[2:]]
+        # self.dimension_units = [u.Unit(i.header["UNIT"]) for i in hdu[2:]]
+        # [
+        #     setattr(self, i.name.lower(), i.data * u.Unit(i.header["UNIT"]))
+        #     for i in hdu[2:]
+        # ]
+        # # [
+        # #     setattr(self, f"{i.name.lower()}p", i.data * u.Unit(i.header["UNIT"]))
+        # #     for i in hdu[2:]
+        # # ]
+
         self.shape = self.psf_flux.shape[:2]
-        self.sub_pixel_size = hdu[0].header["SUBPIXSZ"] * u.micron / u.pix
-
-        self.dimension_names = [i.name.lower() for i in hdu[2:]]
         self.ndims = len(self.dimension_names)
-        self.dimension_units = [u.Unit(i.header["UNIT"]) for i in hdu[2:]]
 
-        [
-            setattr(self, i.name.lower(), i.data * u.Unit(i.header["UNIT"]))
-            for i in hdu[2:]
-        ]
-        [
-            setattr(self, f"{i.name.lower()}p", i.data * u.Unit(i.header["UNIT"]))
-            for i in hdu[2:]
-        ]
 
         if self.ndims == 1:
             setattr(
@@ -198,16 +245,16 @@ class PSF(object):
 
 
 def interpfunc(l, lp, PSF0):
-            if l in lp:
-                PSF1 = PSF0[:, :, np.where(lp == l)[0][0]]
-            else:
-                # Find the two closest frames
-                d = np.argsort(np.abs(lp - l))[:2]
-                d = d[np.argsort(lp[d])]
-                # Linearly interpolate
-                slope = (PSF0[:, :, d[0]] - PSF0[:, :, d[1]]) / (lp[d[0]] - lp[d[1]])
-                PSF1 = PSF0[:, :, d[1]] + (slope * (l - lp[d[1]]))
-            return PSF1
+    if l in lp:
+        PSF1 = PSF0[:, :, np.where(lp == l)[0][0]]
+    else:
+        # Find the two closest frames
+        d = np.argsort(np.abs(lp - l))[:2]
+        d = d[np.argsort(lp[d])]
+        # Linearly interpolate
+        slope = (PSF0[:, :, d[0]] - PSF0[:, :, d[1]]) / (lp[d[0]] - lp[d[1]])
+        PSF1 = PSF0[:, :, d[1]] + (slope * (l - lp[d[1]]))
+    return PSF1
 
 
 class OutOfBoundsError(Exception):

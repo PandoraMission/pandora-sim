@@ -114,15 +114,15 @@ class PandoraSat:
             science_image *= self.VISDA.integration_time * nreads
 
             # fieldstop
-            f = np.hypot(*(np.mgrid[:self.VISDA.naxis1.value.astype(int), :self.VISDA.naxis2.value.astype(int)] - np.hstack([self.VISDA.naxis1.value.astype(int), self.VISDA.naxis2.value.astype(int)])[:, None, None]/2))
-            f = (f < ((0.15*u.deg)/self.VISDA.pixel_scale).to(u.pix).value).astype(float)
-            science_image *= f
+            science_image *= self.VISDA.fieldstop.astype(float)
 
             # noise
-            noise = np.random.normal(loc=self.VISDA.bias.value, scale=self.VISDA.read_noise.value * np.sqrt(nreads),
-                                    size=(self.VISDA.naxis1.value.astype(int), self.VISDA.naxis2.value.astype(int))) * u.electron
-            noise += np.random.poisson(lam=(self.VISDA.dark * self.VISDA.integration_time * nreads).value,
-                                    size=(self.VISDA.naxis1.value.astype(int), self.VISDA.naxis2.value.astype(int))) * u.electron
+            noise = np.zeros(self.VISDA.shape, int)
 
-            science_image += noise
+            noise[self.VISDA.fieldstop] = np.random.normal(loc=self.VISDA.bias.value, scale=self.VISDA.read_noise.value * np.sqrt(nreads),
+                                    size=self.VISDA.fieldstop.sum()) 
+            noise[self.VISDA.fieldstop] += np.random.poisson(lam=(self.VISDA.dark * self.VISDA.integration_time * nreads).value,
+                                    size=self.VISDA.fieldstop.sum())
+
+            science_image += noise * u.electron
         return science_image

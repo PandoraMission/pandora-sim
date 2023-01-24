@@ -44,14 +44,23 @@ class Detector(abc.ABC):
     def __post_init__(self):
         if self.name.lower() in ["visda", "vis", "visible", "v"]:
             #    self.psf_fname = f"{PACKAGEDIR}/data/Pandora_vis.fits"
-            self.psf = PSF(f"{PACKAGEDIR}/data/Pandora_vis_20220506.fits", transpose=self.transpose_psf)
+            self.psf = PSF.from_file(f"{PACKAGEDIR}/data/Pandora_vis_20220506.fits", transpose=self.transpose_psf)
         elif self.name.lower() in ["nirda", "nir", "ir"]:
             #    self.psf_fname = f"{PACKAGEDIR}/data/Pandora_nir.fits"
-            self.psf = PSF(f"{PACKAGEDIR}/data/Pandora_nir_20220506.fits", transpose=self.transpose_psf)
+            self.psf = PSF.from_file(f"{PACKAGEDIR}/data/Pandora_nir_20220506.fits", transpose=self.transpose_psf)
         else:
             raise ValueError(f"No such detector as {self.name}")
         #        self._get_psf()
         self.zeropoint = self._estimate_zeropoint()
+        if hasattr(self, 'fieldstop_radius'):
+            f = np.hypot(*(np.mgrid[:self.naxis1.value.astype(int), :self.naxis2.value.astype(int)] - np.hstack([self.naxis1.value.astype(int), self.naxis2.value.astype(int)])[:, None, None]/2))
+            self.fieldstop = f < (self.fieldstop_radius/self.pixel_scale).to(u.pix).value
+
+
+    @property
+    def shape(self):
+        return (self.naxis1.value.astype(int), self.naxis2.value.astype(int))
+
 
     def __repr__(self):
         return f"Pandora {self.name} Detector"

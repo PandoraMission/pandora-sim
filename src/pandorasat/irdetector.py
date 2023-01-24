@@ -179,6 +179,8 @@ class NIRDetector(Detector):
 
         pix_edges = np.vstack([pix - dp / 2, pix + dp / 2]).T
         wav_edges = self.pixel_to_wavelength(pix_edges * u.pixel)
+
+        unit_convert = (1 * wav.unit*spectrum.unit * sensitivity.unit).to(u.electron/u.second)
         # Iterate every pixel, integrate the SED
         for pdx in range(len(pix)):
             if ~np.isfinite(wav[pdx]):
@@ -187,18 +189,18 @@ class NIRDetector(Detector):
             k = (wavelength > wav_edges[pdx][0]) & (wavelength < wav_edges[pdx][1])
             wp = np.hstack(
                 [
-                    wav_edges[pdx][0] + 1e-10 * u.AA,
+                    wav_edges[pdx][0] + 1e-12 * u.AA,
                     wavelength[k],
-                    wav_edges[pdx][1] - 1e-10 * u.AA,
+                    wav_edges[pdx][1] - 1e-12 * u.AA,
                 ]
             )
             sp = np.interp(wp, wavelength, spectrum * sensitivity)
             integral = (
                 np.trapz(
-                    np.hstack([0, sp, 0]),
-                    np.hstack([wav_edges[pdx][0], wp, wav_edges[pdx][1]]),
+                    np.hstack([0, sp.value, 0]),
+                    np.hstack([wav_edges[pdx][0].value, wp.value, wav_edges[pdx][1].value]),
                 )
-            ).to(u.electron / u.s)
+            ) * unit_convert
 
             # Build the PRF at this wavelength
             #            x, y, prf = self._bin_prf(wavelength=wav[pdx], center=(pix[pdx], 0))
