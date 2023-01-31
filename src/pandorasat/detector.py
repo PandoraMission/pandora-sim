@@ -38,7 +38,7 @@ class Detector(abc.ABC):
     pixel_size: float
     naxis1: int
     naxis2: int
-    gain: float = 2.0 * u.electron / u.DN
+    gain: float = 0.5 * u.electron / u.DN
     transpose_psf: bool = False
 
     def __post_init__(self):

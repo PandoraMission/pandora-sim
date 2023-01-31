@@ -10,6 +10,7 @@ from astroquery.mast import Catalogs
 from . import PACKAGEDIR
 from .utils import get_sky_catalog
 from .detector import Detector
+from .psf import interpfunc
 import warnings
 
 
@@ -45,11 +46,11 @@ class VisibleDetector(Detector):
 
     @property
     def dark(self):
-        return 2 * u.electron / u.second
+        return 1 * u.electron / u.second
 
     @property
     def read_noise(self):
-        return 2.1 * u.electron
+        return 1.5 * u.electron
 
     @property
     def bias(self):
@@ -61,19 +62,19 @@ class VisibleDetector(Detector):
 
     @property
     def fieldstop_radius(self):
-        return 0.15*u.deg
+        return 0.15 * u.deg
 
     def throughput(self, wavelength):
-        return wavelength.value**0 * 0.816
+        return wavelength.value**0 * 0.714
 
     def diagnose(self, n=3, image_type='PSF', wavelength=0.54 * u.micron, temperature=-10 * u.deg_C):
         if not (n % 2) == 1:
             n += 1
         fig, ax = plt.subplots(n, n, figsize=(n*2, n*2))
-        for x, y in np.asarray(((np.mgrid[:n, :n] - n//2) * (600/(n//2)))).reshape((2, n**2)).T:
-            jdx = int(x//(600/(n//2)) + n//2)
-            idx = int(-y//(600/(n//2)) + n//2)
-            point = (x, y, 0.5, 10)
+        for x1, y1 in np.asarray(((np.mgrid[:n, :n] - n//2) * (600/(n//2)))).reshape((2, n**2)).T:
+            jdx = int(x1//(600/(n//2)) + n//2)
+            idx = int(-y1//(600/(n//2)) + n//2)
+            point = (x1, y1, 0.5, 10)
             if image_type.lower() == 'psf':
                 x, y, f = self.psf.psf_x.value, self.psf.psf_y.value, self.psf.psf(point)
                 ax[idx, jdx].set(xticklabels=[], yticklabels=[])
@@ -112,6 +113,82 @@ class VisibleDetector(Detector):
             warnings.simplefilter('ignore')
             wcs = WCS(hdu.header)
         return wcs
+
+    def get_fastPRF(self, wavelength, temperature, res=7, sub_res=5):
+        """Returns a function which will evaluate the PRF on a grid, fast.
+        
+        Parameters
+        ----------
+        wavelength : float with astropy.units
+            The wavelength to evaluate the PRF at
+        temperature : float with astropy.units
+            The temperature to evaluate the PRF at
+        res: int
+            The resolution of the interpolation across the detector.
+        sub_res:
+            The number of samples in sub pixel space
+            
+        Returns
+        -------
+        fastPRF: function
+            Function that will return the PRF
+        """
+        
+        def get_grid(prf_point, res=5):
+            grid = np.zeros((res, res, xs.shape[0], ys.shape[0]))
+            for idx, col in enumerate(np.arange(0, 1, 1/res)):
+                for jdx, row in enumerate(np.arange(0, 1, 1/res)):
+                    x1, y1, ar = self.psf.prf(prf_point, location=(col, row))
+                    k = np.asarray(np.meshgrid(np.in1d(ys, y1), np.in1d(xs, x1))).all(axis=0)
+                    grid[idx, jdx, k] = ar.ravel()
+            return grid
+
+        # Grid of Pixel Locations
+        xs = np.arange(int(np.floor(self.psf.psf_x.min().value)) - 1, int(np.ceil(self.psf.psf_x.max().value)) + 2, 1)
+        ys = np.arange(int(np.floor(self.psf.psf_y.min().value)) - 1, int(np.ceil(self.psf.psf_y.max().value)) + 2, 1)
+
+        # Positions on detector
+        x = np.linspace(int(np.ceil(self.psf.x1d.min().value)), int(np.floor(self.psf.x1d.max().value)), res)
+        y = np.linspace(int(np.ceil(self.psf.y1d.min().value)), int(np.floor(self.psf.y1d.max().value)), res)
+        
+        # Sub Pixels
+        xp, yp = np.arange(0, 1, 1/sub_res), np.arange(0, 1, 1/sub_res)
+        
+        # Build a grid of evaluated PRFs at each location
+        grid = np.zeros((sub_res, sub_res, res, res, xs.shape[0], ys.shape[0]))
+        for idx, col in enumerate(x):
+            for jdx, row in enumerate(y):
+                prf_point = (col, row, wavelength, temperature)
+                grid[:, :, idx, jdx, :] = get_grid(prf_point, sub_res)
+
+        grid = grid.transpose([4, 5, 2, 3, 0, 1])
+        # Function to get PRF at any given location
+        # Will interpolate across the detector, but will return the closest match in subpixel space
+        def fastPRF(xloc:float, yloc:float):
+            """Function to get the PRF. 
+            
+            Parameters
+            ----------
+            xloc: float
+                x location on the detector
+            yloc: float
+                y location on the detector
+                
+            Returns
+            -------
+            x: np.ndarray
+                x location on the detector
+            y: np.ndarray
+                y location on the detector
+            z : np.ndarray
+                2D flux of the PRF on the detector
+            """
+            return (xs + (xloc - (xloc % 1)),
+                ys + (yloc - (yloc % 1)),
+                interpfunc(yloc, y, interpfunc(xloc, x, grid[:, :, :, :, np.argmin(np.abs(xp - (xloc % 1))), np.argmin(np.abs(yp - (yloc % 1)))])))
+        return fastPRF
+
+
     #     X
 
     # def get_sky_catalog(self, target_ra, target_dec, magnitude_range=(-3, 16)):

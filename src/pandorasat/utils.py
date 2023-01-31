@@ -132,27 +132,47 @@ def wavelength_to_rgb(wavelength, gamma=0.8):
     B *= 255
     return np.asarray((int(R), int(G), int(B))) / 256
 
+def get_jitter(xstd:float=1, ystd:float=0.3, correlation_time=1*u.second, nframes=200, frame_time=0.2*u.second, seed=None):
+    """Returns some random, time correlated jitter time-series.
 
-def get_jitter(xstd=1, ystd=0.3, tstd=5, nframes=20, seed=None):
-    """Returns the jitter inside a cadence
-
-    This is a dumb placeholder function.
+    Parameters:
+    ----------
+    xstd: float
+        Standard deviation of jitter in pixels in x axis
+    ystd: float
+        Standard deviation of jitter in pixels in y axis
+    correlation_time: float
+        The timescale over which data is correlated in seconds. 
+        Increase this value for smoother time-series
+    nframes: int
+        Number of frames to generate
+    frame_time: float
+        The time spacing for each frame
+    seed: Optional, int
+        Optional seed for random walk
+    
+    Returns:
+    --------
+    time : np.ndarray
+        Time array in seconds
+    x: np.ndarray
+        Jitter in the x axis
+    y: np.ndarray
+        Jitter in the y axis
     """
-    if seed is not None:
-        np.random.seed(seed)
-    jitter_x = (
-        convolve(np.random.normal(0, xstd, size=nframes), Gaussian1DKernel(tstd))
-        * tstd**0.5
-        * xstd**0.5
-    )
-    if seed is not None:
-        np.random.seed(seed + 1)
-    jitter_y = (
-        convolve(
-            np.random.normal(0, ystd, size=nframes),
-            Gaussian1DKernel(tstd),
+    time = np.arange(nframes) * frame_time
+    tstd = (correlation_time/frame_time).value
+    def jitter_func(std):
+        f = np.random.normal(0, std, size=nframes)
+        return (
+            convolve(f, Gaussian1DKernel(tstd))
+            * tstd**0.5
         )
-        * tstd**0.5
-        * ystd**0.5
-    )
-    return jitter_x, jitter_y
+    
+    jitter = []
+    for idx, std in enumerate([xstd, ystd]):
+        if seed is not None:
+            np.random.seed(seed + idx)
+        jitter.append(jitter_func(std))
+    
+    return time, *jitter*u.pixel

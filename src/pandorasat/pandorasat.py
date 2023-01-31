@@ -12,7 +12,7 @@ from .orbit import Orbit
 from .visibledetector import VisibleDetector
 
 import numpy as np
-from .utils import get_sky_catalog
+from .utils import get_sky_catalog, get_jitter
 
 
 
@@ -26,7 +26,6 @@ class PandoraSat:
         Optics (IRDetector): Class of the Optics properties
         Orbit (IRDetector): Class of the Orbit properties
     """
-
     Orbit = Orbit()
     Optics = Optics()
     NIRDA = NIRDetector(
@@ -35,7 +34,7 @@ class PandoraSat:
         18.0 * u.um / u.pixel,
         2048 * u.pixel,
         512 * u.pixel,
-        2.0 * u.electron / u.DN,
+        0.5 * u.electron / u.DN,
         True,
     )
     VISDA = VisibleDetector(
@@ -44,7 +43,7 @@ class PandoraSat:
         6.5 * u.um / u.pixel,
         2048 * u.pixel,
         2048 * u.pixel,
-        2.0 * u.electron / u.DN,
+        0.5 * u.electron / u.DN,
     )
     targetlist = pd.read_csv(f"{PACKAGEDIR}/data/targets.csv")
 
@@ -90,23 +89,28 @@ class PandoraSat:
                                         columns=['ra', 'dec', 'mag', 'vis_x', 'vis_y', 'nir_x', 'nir_y', 'vis_counts', 'vis_flux'])
         return source_catalog
 
-    def get_sky_image(self, source_catalog, wavelength=0.54*u.micron, temperature=10*u.deg_C, nreads=1, include_noise=True):
-        science_image = np.zeros(
-            (self.VISDA.naxis1.value.astype(int), self.VISDA.naxis2.value.astype(int))
-        )
-        for idx, s in source_catalog.iterrows():
-            x, y = s.vis_x - self.VISDA.naxis1.value//2, s.vis_y - self.VISDA.naxis2.value//2
-            if ((x < -650) | (x > 650) | (y < -650) | (y > 650)):
-                continue
-            x1, y1, f = self.VISDA.psf.prf(
-                (x * u.pix, y * u.pix, wavelength, temperature)
-            )
-            X, Y = np.asarray(np.meshgrid(x1 + self.VISDA.naxis1.value//2, y1 + self.VISDA.naxis2.value//2)).astype(int)
-            science_image[Y, X] += f.T * s.vis_counts
 
-        
-        science_image *= u.electron/u.second
+    def get_sky_images(self, source_catalog, wavelength=0.54*u.micron, temperature=10*u.deg_C, nreads=10, nt=40, xjitter_3sigma=2*u.pixel, yjitter_3sigma=2*u.pixel, jitter_timescale=1*u.second, include_noise=True):
+        prf = self.VISDA.get_fastPRF(wavelength, temperature)
+
+        # Spacecraft jitter motion
+        time, xj, yj = get_jitter(xjitter_3sigma.value, yjitter_3sigma.value, correlation_time=jitter_timescale, nframes=nt * nreads, frame_time=self.VISDA.integration_time)
+        science_image = np.zeros(
+            (nt, self.VISDA.naxis1.value.astype(int), self.VISDA.naxis2.value.astype(int))
+        )
+
+
+        for jdx in range(nt * nreads):
+            for idx, s in source_catalog.iterrows():
+                x, y = xj[jdx].value + s.vis_x - self.VISDA.naxis1.value//2, yj[jdx].value + s.vis_y - self.VISDA.naxis2.value//2
+                if ((x < -750) | (x > 750) | (y < -750) | (y > 750)):
+                    continue
+                x1, y1, f = prf(x, y)
+                X, Y = np.asarray(np.meshgrid(x1 + self.VISDA.naxis1.value//2, y1 + self.VISDA.naxis2.value//2)).astype(int)
+                science_image[jdx//nreads, Y, X] += np.random.poisson(f.T * s.vis_counts)
+                
         if include_noise:
+            science_image *= u.electron/u.second
             # # background light?
             science_image += self.VISDA.get_background_light_estimate(source_catalog.loc[0, 'ra'], source_catalog.loc[0, 'dec'])
 
@@ -117,12 +121,51 @@ class PandoraSat:
             science_image *= self.VISDA.fieldstop.astype(float)
 
             # noise
-            noise = np.zeros(self.VISDA.shape, int)
+            for jdx in range(nt):
+                noise = np.zeros(self.VISDA.shape, int)
 
-            noise[self.VISDA.fieldstop] = np.random.normal(loc=self.VISDA.bias.value, scale=self.VISDA.read_noise.value * np.sqrt(nreads),
-                                    size=self.VISDA.fieldstop.sum()) 
-            noise[self.VISDA.fieldstop] += np.random.poisson(lam=(self.VISDA.dark * self.VISDA.integration_time * nreads).value,
-                                    size=self.VISDA.fieldstop.sum())
+                noise[self.VISDA.fieldstop] = np.random.normal(loc=self.VISDA.bias.value, scale=self.VISDA.read_noise.value * np.sqrt(nreads),
+                                        size=self.VISDA.fieldstop.sum()) 
+                noise[self.VISDA.fieldstop] += np.random.poisson(lam=(self.VISDA.dark * self.VISDA.integration_time * nreads).value,
+                                        size=self.VISDA.fieldstop.sum())
 
-            science_image += noise * u.electron
-        return science_image
+                science_image[jdx] += noise * u.electron
+        return time, xj, yj, science_image
+
+
+    # def get_sky_image(self, source_catalog, wavelength=0.54*u.micron, temperature=10*u.deg_C, nreads=1, include_noise=True):
+    #     science_image = np.zeros(
+    #         (self.VISDA.naxis1.value.astype(int), self.VISDA.naxis2.value.astype(int))
+    #     )
+    #     for idx, s in source_catalog.iterrows():
+    #         x, y = s.vis_x - self.VISDA.naxis1.value//2, s.vis_y - self.VISDA.naxis2.value//2
+    #         if ((x < -650) | (x > 650) | (y < -650) | (y > 650)):
+    #             continue
+    #         x1, y1, f = self.VISDA.psf.prf(
+    #             (x * u.pix, y * u.pix, wavelength, temperature)
+    #         )
+    #         X, Y = np.asarray(np.meshgrid(x1 + self.VISDA.naxis1.value//2, y1 + self.VISDA.naxis2.value//2)).astype(int)
+    #         science_image[Y, X] += f.T * s.vis_counts
+
+        
+    #     science_image *= u.electron/u.second
+    #     if include_noise:
+    #         # # background light?
+    #         science_image += self.VISDA.get_background_light_estimate(source_catalog.loc[0, 'ra'], source_catalog.loc[0, 'dec'])
+
+    #         # time integrate
+    #         science_image *= self.VISDA.integration_time * nreads
+
+    #         # fieldstop
+    #         science_image *= self.VISDA.fieldstop.astype(float)
+
+    #         # noise
+    #         noise = np.zeros(self.VISDA.shape, int)
+
+    #         noise[self.VISDA.fieldstop] = np.random.normal(loc=self.VISDA.bias.value, scale=self.VISDA.read_noise.value * np.sqrt(nreads),
+    #                                 size=self.VISDA.fieldstop.sum()) 
+    #         noise[self.VISDA.fieldstop] += np.random.poisson(lam=(self.VISDA.dark * self.VISDA.integration_time * nreads).value,
+    #                                 size=self.VISDA.fieldstop.sum())
+
+    #         science_image += noise * u.electron
+    #     return science_image
