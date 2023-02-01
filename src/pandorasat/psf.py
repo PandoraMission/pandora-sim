@@ -86,27 +86,6 @@ class PSF(object):
         )
 
     def validate(self):
-        # self.filename = filename
-        # hdu = fits.open(filename)
-        # self.pixel_size = hdu[0].header["PIXSIZE"] * u.micron / u.pix
-        # self.psf_flux = hdu[1].data
-        # # I think this makes it the right way round
-        # self.psf_flux = self.psf_flux.transpose([1, 0, *np.arange(2, self.psf_flux.ndim)])
-        # # Testing
-        # self.psf_flux = self.psf_flux[:, :-10]
-        # if transpose:
-        #     self.psf_flux = self.psf_flux.transpose([1, 0, *np.arange(2, self.psf_flux.ndim)])
-        # self.sub_pixel_size = hdu[0].header["SUBPIXSZ"] * u.micron / u.pix
-        # self.dimension_names = [i.name.lower() for i in hdu[2:]]
-        # self.dimension_units = [u.Unit(i.header["UNIT"]) for i in hdu[2:]]
-        # [
-        #     setattr(self, i.name.lower(), i.data * u.Unit(i.header["UNIT"]))
-        #     for i in hdu[2:]
-        # ]
-        # # [
-        # #     setattr(self, f"{i.name.lower()}p", i.data * u.Unit(i.header["UNIT"]))
-        # #     for i in hdu[2:]
-        # # ]
 
         self.shape = self.psf_flux.shape[:2]
         self.ndims = len(self.dimension_names)
@@ -129,7 +108,19 @@ class PSF(object):
                 )
                 for d in range(self.ndims - 1):
                     lp = np.take(lp, 0, -1)
-                setattr(self, self.dimension_names[dim] + "1d", lp)
+                s = np.argsort(lp.value)
+                setattr(self, self.dimension_names[dim] + "1d", lp[s])
+                # We have to do this to sort the axis, having them sorted will mean it's easier to interpolate later...
+                reshape = np.hstack(
+                    [np.hstack([dim, list(dims - set([dim]))]) + 2, 0, 1]
+                )
+                deshape = [
+                    np.where(reshape == idx)[0][0]
+                    for idx in range(len(reshape))
+                ]
+                self.psf_flux = self.psf_flux.transpose(reshape)[s].transpose(
+                    deshape
+                )
                 midpoint = getattr(self, self.dimension_names[dim] + "1d")
                 midpoint = midpoint[len(midpoint) // 2]
                 setattr(self, self.dimension_names[dim] + "0d", midpoint)
@@ -268,6 +259,10 @@ class PSF(object):
 def interpfunc(l, lp, PSF0):
     if l in lp:
         PSF1 = PSF0[:, :, np.where(lp == l)[0][0]]
+    elif l < lp[0]:
+        PSF1 = PSF0[:, :, 0]
+    elif l > lp[-1]:
+        PSF1 = PSF0[:, :, -1]
     else:
         # Find the two closest frames
         d = np.argsort(np.abs(lp - l))[:2]

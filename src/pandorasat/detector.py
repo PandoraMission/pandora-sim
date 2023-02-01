@@ -61,24 +61,21 @@ class Detector(abc.ABC):
         #        self._get_psf()
         self.zeropoint = self._estimate_zeropoint()
         if hasattr(self, "fieldstop_radius"):
-            f = np.hypot(
-                *(
-                    np.mgrid[
-                        : self.naxis1.value.astype(int),
-                        : self.naxis2.value.astype(int),
+            C, R = (
+                np.mgrid[
+                    : self.naxis1.value.astype(int),
+                    : self.naxis2.value.astype(int),
+                ]
+                - np.hstack(
+                    [
+                        self.naxis1.value.astype(int),
+                        self.naxis2.value.astype(int),
                     ]
-                    - np.hstack(
-                        [
-                            self.naxis1.value.astype(int),
-                            self.naxis2.value.astype(int),
-                        ]
-                    )[:, None, None]
-                    / 2
-                )
+                )[:, None, None]
+                / 2
             )
-            self.fieldstop = (
-                f < (self.fieldstop_radius / self.pixel_scale).to(u.pix).value
-            )
+            r = (self.fieldstop_radius / self.pixel_scale).to(u.pix).value
+            self.fieldstop = ~((np.abs(C) >= r) | (np.abs(R) >= r))
 
     @property
     def shape(self):

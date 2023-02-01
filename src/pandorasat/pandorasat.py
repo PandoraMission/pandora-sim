@@ -66,7 +66,7 @@ class PandoraSat:
         """
 
         # This is fixed for visda, for now
-        radius = 0.155  # degrees
+        radius = (2 * self.VISDA.fieldstop_radius.to(u.deg).value ** 2) ** 0.5
         # catalog_data = Catalogs.query_object(target_name, radius=radius, catalog="TIC")
         # target_ra, target_dec = catalog_data[0][['ra', 'dec']].values()
 
