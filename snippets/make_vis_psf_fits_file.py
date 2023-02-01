@@ -11,7 +11,7 @@ from datetime import datetime
 
 d = loadmat('/Users/chedges/Downloads/pandora_vis_20220506.mat')
 # Bin down the PSF, it's too big a file...
-nbin = 2
+nbin = 4
 PSF = np.asarray([[d['PSF'][128:384, 128:384][idx::nbin, jdx::nbin] for idx in range(nbin)] for jdx in range(nbin)]).mean(axis=(0, 1))
 PSF = PSF.reshape((*PSF.shape[:2], 9, 9, 5))
 PSF /= PSF.sum(axis=(0, 1))[None, None]
@@ -47,7 +47,7 @@ hdu.writeto('/Users/chedges/repos/pandora-sat/src/pandorasat/data/pandora_vis_20
 
 d = loadmat('/Users/chedges/Downloads/pandora_nir_20220506_PSF.mat')
 # Bin down PSF, too big
-nbin = 2
+nbin = 4
 PSF = np.asarray([[d['PSF'][128:384, 128:384][idx::nbin, jdx::nbin] for idx in range(nbin)] for jdx in range(nbin)]).mean(axis=(0, 1))
 PSF = PSF.reshape((*PSF.shape[:2], 901))
 PSF /= PSF.sum(axis=(0, 1))[None, None]
@@ -78,7 +78,7 @@ hdu.writeto('/Users/chedges/repos/pandora-sat/src/pandorasat/data/pandora_nir_20
 #-----------------------------------#
 
 d = loadmat('/Users/chedges/Downloads/pandora_vis_20220506_hot_PSF_512.mat')
-nbin = 2
+nbin = 4
 PSF_hot = d['PSF'][:-1, :-1, :][128:384, 128:384]
 PSF_hot = np.asarray([[PSF_hot[idx::nbin, jdx::nbin] for idx in range(nbin)] for jdx in range(nbin)]).mean(axis=(0, 1))
 PSF_hot = PSF_hot.reshape((*PSF_hot.shape[:2], 9, 9, 5))
@@ -130,7 +130,7 @@ hdu.writeto('/Users/chedges/repos/pandora-sat/src/pandorasat/data/pandora_vis_20
 #-----------------------------------#
 
 d = loadmat('/Users/chedges/Downloads/pandora_nir_20220506_thin_prism_hot_PSF_512.mat')
-nbin = 2
+nbin = 4
 PSF_hot = d['PSF'][:-1, :-1, :-1][128:384, 128:384]
 PSF_hot = np.asarray([[PSF_hot[idx::nbin, jdx::nbin] for idx in range(nbin)] for jdx in range(nbin)]).mean(axis=(0, 1))
 
