@@ -1,3 +1,0 @@
-*.fits filter=lfs diff=lfs merge=lfs -text
-src/pandorasat/data/pandora_vis_20220506.fits filter=lfs diff=lfs merge=lfs -text
-src/pandorasat/data/pandora_nir_20220506.fits filter=lfs diff=lfs merge=lfs -text
