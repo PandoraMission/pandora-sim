@@ -266,11 +266,14 @@ class VisibleDetector(Detector):
     #     return science_image
 
     def get_background_light_estimate(self, ra, dec):
-        """Placeholder, will estimate the background light at different locations?"""
-        bkg = np.zeros(self.shape, int)
-        bkg[self.fieldstop] = np.random.poisson(lam=10,
-                                   size=self.fieldstop.sum())
-        return bkg * u.electron/u.second
+        """Placeholder, will estimate the background light at different locations?
+        Background in one integration...!
+        """
+
+        bkg = u.Quantity(np.zeros(self.shape, int), unit='electron', dtype='int')
+        bkg[self.fieldstop] = u.Quantity(np.random.poisson(lam=2,
+                                   size=self.fieldstop.sum()).astype(int), unit='electron', dtype='int')
+        return bkg
 
 
 
