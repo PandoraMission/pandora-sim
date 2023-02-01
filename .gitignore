@@ -1,6 +1,6 @@
 sandbox
 src/pandorasat/data/old
-src/pandorasat/data/pandora_*_20220506.fits
+src/pandorasat/data/pandora_*_20220506.*
 
 # Mac things
 .DS_Store
