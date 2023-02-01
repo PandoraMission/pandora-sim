@@ -1,75 +1,94 @@
-import sys
-import os
-import time
-import re
+# Standard library
 import json
-import pandas as pd
-import requests
-from urllib.parse import quote as urlencode    
+import sys
+from urllib.parse import quote as urlencode
+
+# Third-party
 import astropy.units as u
 import numpy as np
+import pandas as pd
+import requests
 from astropy.constants import c, h
 from astropy.convolution import Gaussian1DKernel, convolve
 
 from . import PACKAGEDIR
 
+
 def mast_query(request):
     """Perform a MAST query.
-    
-        Parameters
-        ----------
-        request (dictionary): The MAST request json object
-        
-        Returns head,content where head is the response HTTP headers, and content is the returned data"""
-    
+
+    Parameters
+    ----------
+    request (dictionary): The MAST request json object
+
+    Returns head,content where head is the response HTTP headers, and content is the returned data"""
+
     # Base API url
-    request_url='https://mast.stsci.edu/api/v0/invoke'    
-    
-    # Grab Python Version 
+    request_url = "https://mast.stsci.edu/api/v0/invoke"
+
+    # Grab Python Version
     version = ".".join(map(str, sys.version_info[:3]))
- 
+
     # Create Http Header Variables
-    headers = {"Content-type": "application/x-www-form-urlencoded",
-               "Accept": "text/plain",
-               "User-agent":"python-requests/"+version}
- 
+    headers = {
+        "Content-type": "application/x-www-form-urlencoded",
+        "Accept": "text/plain",
+        "User-agent": "python-requests/" + version,
+    }
+
     # Encoding the request as a json string
     req_string = json.dumps(request)
     req_string = urlencode(req_string)
-    
+
     # Perform the HTTP request
-    resp = requests.post(request_url, data="request="+req_string, headers=headers)
-    
+    resp = requests.post(
+        request_url, data="request=" + req_string, headers=headers
+    )
+
     # Pull out the headers and response content
     head = resp.headers
-    content = resp.content.decode('utf-8')
- 
+    content = resp.content.decode("utf-8")
+
     return head, content
 
-def get_sky_catalog(ra=210.8023, dec=54.349, radius=0.155, magnitude_range=(-3, 16), columns="ra, dec, gaiabp"):
+
+def get_sky_catalog(
+    ra=210.8023,
+    dec=54.349,
+    radius=0.155,
+    magnitude_range=(-3, 16),
+    columns="ra, dec, gaiabp",
+):
     """We use this instead of astroquery so we can query based on magnitude filters, and reduce the columns
-    
+
     See documentation at:
     https://mast.stsci.edu/api/v0/_services.html
     https://mast.stsci.edu/api/v0/pyex.html#MastCatalogsFilteredTicPy
     https://mast.stsci.edu/api/v0/_t_i_cfields.html
     """
-    request = {"service":"Mast.Catalogs.Filtered.Tic.Position.Rows",
-               "format":"json",
-               "params":{
-                   "columns":columns,
-                   "filters":[
-                       {"paramName":"gaiabp",
-                        "values":[{"min":magnitude_range[0],"max":magnitude_range[1]}]}],
-                   "ra": ra,
-                   "dec": dec,
-                   "radius": radius
-               }}
- 
+    request = {
+        "service": "Mast.Catalogs.Filtered.Tic.Position.Rows",
+        "format": "json",
+        "params": {
+            "columns": columns,
+            "filters": [
+                {
+                    "paramName": "gaiabp",
+                    "values": [
+                        {"min": magnitude_range[0], "max": magnitude_range[1]}
+                    ],
+                }
+            ],
+            "ra": ra,
+            "dec": dec,
+            "radius": radius,
+        },
+    }
+
     headers, out_string = mast_query(request)
     out_data = json.loads(out_string)
- 
-    df = pd.DataFrame.from_dict(out_data['data'])
+
+    df = pd.DataFrame.from_dict(out_data["data"])
     s = np.argsort(np.hypot(np.asarray(df.ra) - ra, np.asarray(df.dec) - dec))
     return df.loc[s].reset_index(drop=True)
 
@@ -132,7 +151,15 @@ def wavelength_to_rgb(wavelength, gamma=0.8):
     B *= 255
     return np.asarray((int(R), int(G), int(B))) / 256
 
-def get_jitter(xstd:float=1, ystd:float=0.3, correlation_time=1*u.second, nframes=200, frame_time=0.2*u.second, seed=None):
+
+def get_jitter(
+    xstd: float = 1,
+    ystd: float = 0.3,
+    correlation_time=1 * u.second,
+    nframes=200,
+    frame_time=0.2 * u.second,
+    seed=None,
+):
     """Returns some random, time correlated jitter time-series.
 
     Parameters:
@@ -142,7 +169,7 @@ def get_jitter(xstd:float=1, ystd:float=0.3, correlation_time=1*u.second, nframe
     ystd: float
         Standard deviation of jitter in pixels in y axis
     correlation_time: float
-        The timescale over which data is correlated in seconds. 
+        The timescale over which data is correlated in seconds.
         Increase this value for smoother time-series
     nframes: int
         Number of frames to generate
@@ -150,7 +177,7 @@ def get_jitter(xstd:float=1, ystd:float=0.3, correlation_time=1*u.second, nframe
         The time spacing for each frame
     seed: Optional, int
         Optional seed for random walk
-    
+
     Returns:
     --------
     time : np.ndarray
@@ -160,19 +187,17 @@ def get_jitter(xstd:float=1, ystd:float=0.3, correlation_time=1*u.second, nframe
     y: np.ndarray
         Jitter in the y axis
     """
-    time = np.arange(nframes) * frame_time
-    tstd = (correlation_time/frame_time).value
+    time = np.arange(nframes) * frame_time  # noqa:F811
+    tstd = (correlation_time / frame_time).value
+
     def jitter_func(std):
         f = np.random.normal(0, std, size=nframes)
-        return (
-            convolve(f, Gaussian1DKernel(tstd))
-            * tstd**0.5
-        )
-    
+        return convolve(f, Gaussian1DKernel(tstd)) * tstd**0.5
+
     jitter = []
     for idx, std in enumerate([xstd, ystd]):
         if seed is not None:
             np.random.seed(seed + idx)
         jitter.append(jitter_func(std))
-    
-    return time, *jitter*u.pixel
+
+    return time, *jitter * u.pixel

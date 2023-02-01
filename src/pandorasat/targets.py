@@ -1,9 +1,11 @@
 """Deal with Pandora targets"""
 
+# Standard library
 import os
 import warnings
 from dataclasses import dataclass
 
+# Third-party
 import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,8 +14,8 @@ from astropy.coordinates import SkyCoord
 from astropy.io import votable
 from astropy.modeling import models
 from astropy.utils.data import download_file
-from astroquery.vizier import Vizier
 from astroquery.ipac.nexsci.nasa_exoplanet_archive import NasaExoplanetArchive
+from astroquery.vizier import Vizier
 
 from . import PACKAGEDIR
 
@@ -22,6 +24,7 @@ os.environ["PYSYN_CDBS"] = phoenixpath
 
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", message="Extinction files not found in ")
+    # Third-party
     import pysynphot
 
 
@@ -30,41 +33,78 @@ class Target(object):
     name: str
 
     def __post_init__(self):
-        key_dict = {"Tmag":"tmag", "RAJ2000":"ra", "DEJ2000":"dec", "Teff":"teff", "logg":"logg", "Jmag":"jmag"}
+        key_dict = {
+            "Tmag": "tmag",
+            "RAJ2000": "ra",
+            "DEJ2000": "dec",
+            "Teff": "teff",
+            "logg": "logg",
+            "Jmag": "jmag",
+        }
         viz_dat = np.asarray(
             Vizier(columns=list(key_dict.keys()))
-            .query_object(self.name, catalog="IV/39/tic82", radius=0.1*u.arcsecond)[
-                0
-            ][list(key_dict.keys())]
+            .query_object(
+                self.name, catalog="IV/39/tic82", radius=0.1 * u.arcsecond
+            )[0][list(key_dict.keys())]
             .to_pandas()
             .iloc[0]
         )
-        [setattr(self, key_dict[k], viz_dat[idx]) for idx, k in enumerate(key_dict)]
+        [
+            setattr(self, key_dict[k], viz_dat[idx])
+            for idx, k in enumerate(key_dict)
+        ]
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             planets_tab = NasaExoplanetArchive.query_region(
-                table="pscomppars", coordinates=SkyCoord(ra=self.ra * u.deg, dec=self.dec * u.deg),
-                radius=5 * u.arcsecond) 
+                table="pscomppars",
+                coordinates=SkyCoord(ra=self.ra * u.deg, dec=self.dec * u.deg),
+                radius=5 * u.arcsecond,
+            )
             if len(planets_tab) != 0:
-                attrs = ['pl_orbper', 'pl_tranmid', 'pl_trandur', 'pl_trandep']
-                self.planets = {letter:{attr:planets_tab[planets_tab['pl_letter'] == letter][attr][0].unmasked for attr in attrs} for letter in planets_tab['pl_letter']}
+                attrs = ["pl_orbper", "pl_tranmid", "pl_trandur", "pl_trandep"]
+                self.planets = {
+                    letter: {
+                        attr: planets_tab[planets_tab["pl_letter"] == letter][
+                            attr
+                        ][0].unmasked
+                        for attr in attrs
+                    }
+                    for letter in planets_tab["pl_letter"]
+                }
                 # There's an error in the NASA exoplanet archive units that makes duration "days" instead of "hours"
                 for planet in self.planets:
-                    self.planets[planet]['pl_trandur'] = self.planets[planet]['pl_trandur'].value * u.hour 
+                    self.planets[planet]["pl_trandur"] = (
+                        self.planets[planet]["pl_trandur"].value * u.hour
+                    )
 
     def box_transit(self, time):
         lc = np.zeros_like(time)
         for planet in self.planets:
-            phase = ((time - self.planets[planet]['pl_tranmid'].to(u.day).value) % self.planets[planet]['pl_orbper'].to(u.day).value)
-            mask = (phase < self.planets[planet]['pl_trandur'].to(u.day).value/2) | (phase > (self.planets[planet]['pl_orbper'].to(u.day).value - self.planets[planet]['pl_trandur'].to(u.day).value/2))
-            lc += -np.nan_to_num(mask.astype(float) * (self.planets[planet]['pl_trandep'].value/100))
+            phase = (
+                time - self.planets[planet]["pl_tranmid"].to(u.day).value
+            ) % self.planets[planet]["pl_orbper"].to(u.day).value
+            mask = (
+                phase < self.planets[planet]["pl_trandur"].to(u.day).value / 2
+            ) | (
+                phase
+                > (
+                    self.planets[planet]["pl_orbper"].to(u.day).value
+                    - self.planets[planet]["pl_trandur"].to(u.day).value / 2
+                )
+            )
+            lc += -np.nan_to_num(
+                mask.astype(float)
+                * (self.planets[planet]["pl_trandep"].value / 100)
+            )
         return lc + 1
-        
+
     def from_vizier(self, radius=2):
         vizier_url = f"https://vizier.cds.unistra.fr/viz-bin/sed?-c={self.name.replace(' ', '%20')}&-c.rs={radius}"
         df = (
-            votable.parse(download_file(vizier_url)).get_first_table().to_table()
+            votable.parse(download_file(vizier_url))
+            .get_first_table()
+            .to_table()
         )  # .to_pandas()
         df = df[df["sed_flux"] / df["sed_eflux"] > 5]
         if len(df) == 0:
@@ -90,7 +130,10 @@ class Target(object):
             sed_flux[k][s],
             sed_flux_err[k][s],
         )
-        self.ra, self.dec = df["_RAJ2000"].data.mean(), df["_DEJ2000"].data.mean()
+        self.ra, self.dec = (
+            df["_RAJ2000"].data.mean(),
+            df["_DEJ2000"].data.mean(),
+        )
         self.fit()
         self.model_type = "sed_fit"
         return self
@@ -105,7 +148,9 @@ class Target(object):
             self.jmag = jmag
 
         star = pysynphot.Icat("phoenix", self.teff, 0.0, self.logg)
-        star_norm = star.renorm(self.jmag, "vegamag", pysynphot.ObsBandpass("johnson,j"))
+        star_norm = star.renorm(
+            self.jmag, "vegamag", pysynphot.ObsBandpass("johnson,j")
+        )
         star_norm.convert("Micron")
         star_norm.convert("flam")
 
@@ -177,7 +222,7 @@ class Target(object):
         #     / u.sr
         # )
         if np.isfinite(self.teff):
-            temperatures = np.linspace(self.teff - 300, self.teff + 300, 100)            
+            temperatures = np.linspace(self.teff - 300, self.teff + 300, 100)
         else:
             temperatures = np.linspace(1000, 10000, 100)
         chi2 = np.zeros_like(temperatures)
@@ -191,9 +236,12 @@ class Target(object):
             temperatures = (temperatures - t) * 0.5 + t
 
         self.bestfit_temperature = temperatures[np.argmin(chi2)] * u.K
-        self._blackbody = models.BlackBody(temperature=self.bestfit_temperature)
+        self._blackbody = models.BlackBody(
+            temperature=self.bestfit_temperature
+        )
         bb_model = (self._blackbody(self.wavelength) * u.sr).to(
-            self.spectrum.unit, equivalencies=u.spectral_density(self.wavelength)
+            self.spectrum.unit,
+            equivalencies=u.spectral_density(self.wavelength),
         )
         self._corr = np.nanmean(self.spectrum / bb_model)
 
@@ -208,5 +256,6 @@ class Target(object):
             )
         else:
             return (self._blackbody(wavelength) * u.sr).to(
-                self.spectrum.unit, equivalencies=u.spectral_density(wavelength)
+                self.spectrum.unit,
+                equivalencies=u.spectral_density(wavelength),
             ) * self._corr

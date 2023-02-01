@@ -1,6 +1,9 @@
+# Third-party
 import astropy.units as u
 import numpy as np
+import pytest
 
+# First-party/Local
 from pandorasat import PACKAGEDIR, PSF, PandoraSat, Target, __version__
 
 
@@ -20,15 +23,20 @@ def test_pandorasat():
     return
 
 
+@pytest.mark.remote_data
 def test_trace():
     t = Target("GJ 436").from_vizier()
     t = Target("GJ 436").from_phoenix()
     nirda = PandoraSat.NIRDA
     wavelength = np.linspace(0.1, 2, 6000) * u.micron
     spectrum = t.model_spectrum(wavelength)
-    #nirda.get_trace(t, 2, target_center=(20, 200))
-    
-    nirda.get_trace(wavelength, spectrum.value**0 * spectrum.unit, target_center=[40, 250])
+    # nirda.get_trace(t, 2, target_center=(20, 200))
+
+    nirda.get_trace(
+        wavelength,
+        spectrum.value**0 * spectrum.unit,
+        target_center=[40, 250],
+    )
     return
 
 

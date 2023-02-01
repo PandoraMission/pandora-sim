@@ -1,7 +1,9 @@
 """Holds basic metadata on the optics of Pandora"""
 
+# Standard library
 from dataclasses import dataclass
 
+# Third-party
 import astropy.units as u
 
 

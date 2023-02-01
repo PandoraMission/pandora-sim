@@ -1,4 +1,5 @@
 """Work with Point Spread Functions"""
+# Third-party
 import astropy.units as u
 import numpy as np
 from astropy.io import fits
@@ -11,7 +12,16 @@ from . import PACKAGEDIR
 class PSF(object):
     """Class to use PSFs"""
 
-    def __init__(self, X, psf_flux, dimension_names, dimension_units, pixel_size, sub_pixel_size, transpose=False):
+    def __init__(
+        self,
+        X,
+        psf_flux,
+        dimension_names,
+        dimension_units,
+        pixel_size,
+        sub_pixel_size,
+        transpose=False,
+    ):
         """PSF class. Takes in a PSF cube.
 
         This class will let you use an N dimensional PSF fits file, and will let you
@@ -22,7 +32,9 @@ class PSF(object):
         """
         self.psf_flux = psf_flux
         if transpose:
-            self.psf_flux = self.psf_flux.transpose([1, 0, *np.arange(2, self.psf_flux.ndim)])
+            self.psf_flux = self.psf_flux.transpose(
+                [1, 0, *np.arange(2, self.psf_flux.ndim)]
+            )
         self.dimension_names = dimension_names
         self.dimension_units = dimension_units
         self.pixel_size = pixel_size
@@ -33,9 +45,11 @@ class PSF(object):
 
         self.validate()
 
-
     @staticmethod
-    def from_file(filename=f"{PACKAGEDIR}/data/pandora_vis_20220506.fits", transpose=False):
+    def from_file(
+        filename=f"{PACKAGEDIR}/data/pandora_vis_20220506.fits",
+        transpose=False,
+    ):
         """PSF class. Takes in a PSF cube fits file.
 
         This class will let you use an N dimensional PSF fits file, and will let you
@@ -61,14 +75,15 @@ class PSF(object):
         sub_pixel_size = hdu[0].header["SUBPIXSZ"] * u.micron / u.pix
         dimension_names = [i.name.lower() for i in hdu[2:]]
         dimension_units = [u.Unit(i.header["UNIT"]) for i in hdu[2:]]
-        X = [i.data * u.Unit(i.header["UNIT"])
-            for i in hdu[2:]
-        ]
-        return PSF(X, psf_flux, dimension_names, dimension_units, pixel_size, sub_pixel_size)
-
-
-
-
+        X = [i.data * u.Unit(i.header["UNIT"]) for i in hdu[2:]]
+        return PSF(
+            X,
+            psf_flux,
+            dimension_names,
+            dimension_units,
+            pixel_size,
+            sub_pixel_size,
+        )
 
     def validate(self):
         # self.filename = filename
@@ -95,7 +110,6 @@ class PSF(object):
 
         self.shape = self.psf_flux.shape[:2]
         self.ndims = len(self.dimension_names)
-
 
         if self.ndims == 1:
             setattr(
@@ -143,7 +157,10 @@ class PSF(object):
             )
         # Check units
         point = tuple(
-            [u.Quantity(p, self.dimension_units[dim]) for dim, p in enumerate(point)]
+            [
+                u.Quantity(p, self.dimension_units[dim])
+                for dim, p in enumerate(point)
+            ]
         )
         # Check in bounds
         for dim, p in enumerate(point):
@@ -191,7 +208,9 @@ class PSF(object):
         PSF0 = self.psf_flux
         for dim, p in enumerate(point):
             PSF0 = interpfunc(
-                p.value, getattr(self, self.dimension_names[dim] + "1d").value, PSF0
+                p.value,
+                getattr(self, self.dimension_names[dim] + "1d").value,
+                PSF0,
             )
         return PSF0
 
@@ -219,7 +238,10 @@ class PSF(object):
             location = [point[xloc[0]], point[yloc[0]]]
         if len(location) != 2:
             raise ValueError("Pass a 2D location in pixels")
-        location = [u.Quantity(location[0], "pixel"), u.Quantity(location[1], "pixel")]
+        location = [
+            u.Quantity(location[0], "pixel"),
+            u.Quantity(location[1], "pixel"),
+        ]
 
         mod = (self.psf_x.value + location[0].value) % 1
         cyc = (self.psf_x.value + location[0].value) - mod
@@ -241,7 +263,6 @@ class PSF(object):
 
     def __repr__(self):
         return f"{self.ndims}D PSF Model [{', '.join(self.dimension_names)}]"
-
 
 
 def interpfunc(l, lp, PSF0):
