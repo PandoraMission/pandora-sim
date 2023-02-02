@@ -1,8 +1,8 @@
 # Third-party
 import astropy.units as u
-from astropy.coordinates import SkyCoord
 import numpy as np
 import pytest
+from astropy.coordinates import SkyCoord
 
 # First-party/Local
 from pandorasat import PACKAGEDIR, PSF, PandoraSat, Target, __version__
@@ -70,20 +70,24 @@ def test_visiblesim():
     # Get a list of sources nearby that will be on the detector
     source_catalog = p.get_sky_catalog(c.ra.deg, c.dec.deg)
     # Set up jitter properties
-    xjitter_3sigma = 2*u.pix
-    yjitter_3sigma = 2*u.pix
-    jitter_timescale = 1*u.second
+    xjitter_3sigma = 2 * u.pix
+    yjitter_3sigma = 2 * u.pix
+    jitter_timescale = 1 * u.second
     # 40 frames
     nt = 40
-    prf_func = p.VISDA.get_fastPRF(wavelength=0.54*u.micron, temperature=10*u.deg_C)
+    prf_func = p.VISDA.get_fastPRF(
+        wavelength=0.54 * u.micron, temperature=10 * u.deg_C
+    )
     # Build the images
-    time, xcenter, ycenter, science_images = p.get_sky_images(source_catalog,
-                                                            nreads=1,
-                                                            nt=nt, 
-                                                            xjitter_3sigma=xjitter_3sigma,
-                                                            yjitter_3sigma=yjitter_3sigma, 
-                                                            jitter_timescale=jitter_timescale,
-                                                            prf_func=prf_func)
+    time, xcenter, ycenter, science_images = p.get_sky_images(
+        source_catalog,
+        nreads=1,
+        nt=nt,
+        xjitter_3sigma=xjitter_3sigma,
+        yjitter_3sigma=yjitter_3sigma,
+        jitter_timescale=jitter_timescale,
+        prf_func=prf_func,
+    )
     assert isinstance(science_images, u.Quantity)
     assert isinstance(time, u.Quantity)
     assert isinstance(xcenter, u.Quantity)

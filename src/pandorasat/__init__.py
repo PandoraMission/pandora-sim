@@ -21,7 +21,7 @@ if not os.path.isfile(f"{PACKAGEDIR}/data/pandora_vis_20220506.fits"):
         "https://zenodo.org/record/7596336/files/pandora_vis_20220506.fits?download=1",
         pkgname="pandora-sat",
     )
-    shutil.move(p, f"{PACKAGEDIR}/data/pandora_vis_20220506.fits")
+    shutil.move(p, f"{PACKAGEDIR}/data/Pandora_vis_20220506.fits")
 
 if not os.path.isfile(f"{PACKAGEDIR}/data/pandora_nir_20220506.fits"):
     # Download nir PSF
@@ -30,7 +30,7 @@ if not os.path.isfile(f"{PACKAGEDIR}/data/pandora_nir_20220506.fits"):
         "https://zenodo.org/record/7596336/files/pandora_nir_20220506.fits?download=1",
         pkgname="pandora-sat",
     )
-    shutil.move(p, f"{PACKAGEDIR}/data/pandora_nir_20220506.fits")
+    shutil.move(p, f"{PACKAGEDIR}/data/Pandora_nir_20220506.fits")
 
 from .pandorasat import PandoraSat  # noqa
 from .psf import PSF  # noqa
