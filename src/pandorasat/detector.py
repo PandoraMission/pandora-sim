@@ -40,7 +40,7 @@ class Detector(abc.ABC):
     pixel_size: float
     naxis1: int
     naxis2: int
-    gain: float = 0.5 * u.electron / u.DN
+#    gain: float = 0.5 * u.electron / u.DN
     transpose_psf: bool = False
 
     def __post_init__(self):
@@ -195,10 +195,8 @@ class Detector(abc.ABC):
                 u.photon / u.second / u.angstrom
             )
             * self.qe(wavelength)
-            * self.gain
         )
-        photon_flux = photon_flux_density
-        sensitivity = photon_flux / sed
+        sensitivity = photon_flux_density / sed
         return sensitivity
 
     # def prf(

@@ -13,6 +13,7 @@ from astropy.wcs import WCS
 from . import PACKAGEDIR
 from .detector import Detector
 from .psf import interpfunc
+from .wcs import get_wcs
 
 
 class VisibleDetector(Detector):
@@ -65,7 +66,7 @@ class VisibleDetector(Detector):
 
     @property
     def fieldstop_radius(self):
-        return 0.15 * u.deg
+        return 0.3 * u.deg
 
     def throughput(self, wavelength):
         return wavelength.value**0 * 0.714
@@ -119,24 +120,31 @@ class VisibleDetector(Detector):
         ax[0, n // 2].set(title=image_type.upper())
         return fig
 
-    def wcs(self, target_ra, target_dec):
-        # This is where we'd build or use a WCS.
-        # Here we're assuming no distortions, no rotations.
-        hdu = fits.PrimaryHDU()
-        hdu.header["CTYPE1"] = "RA---TAN"
-        hdu.header["CTYPE2"] = "DEC--TAN"
-        hdu.header["CRVAL1"] = target_ra
-        hdu.header["CRVAL2"] = target_dec
-        hdu.header["CRPIX1"] = self.naxis1.value / 2  # + 0.5
-        hdu.header["CRPIX2"] = self.naxis2.value / 2  # - 0.5
-        hdu.header["NAXIS1"] = self.naxis1.value
-        hdu.header["NAXIS2"] = self.naxis2.value
-        hdu.header["CDELT1"] = -self.pixel_scale.to(u.deg / u.pixel).value
-        hdu.header["CDELT2"] = self.pixel_scale.to(u.deg / u.pixel).value
-        # We're not doing any rotation and scaling right now... but those go in PC1_1, PC1_2, PC1_2, PC2_2
+    def wcs(
+        self, target_ra: u.Quantity, target_dec: u.Quantity, theta: u.Quantity, distortion: bool=True,
+    ):
+        """Get the World Coordinate System for a detector
+
+        Parameters:
+        -----------
+        target_ra: astropy.units.Quantity
+            The target RA in degrees
+        target_dec: astropy.units.Quantity
+            The target Dec in degrees
+        theta: astropy.units.Quantity
+            The observatory angle in degrees
+        distortion_file: str
+            Optional file path to a distortion CSV file. See `wcs.read_distortion_file`
+        """
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            wcs = WCS(hdu.header)
+            wcs = get_wcs(
+                self,
+                target_ra=target_ra,
+                target_dec=target_dec,
+                theta=theta,
+                distortion_file=f"{PACKAGEDIR}/data/fov_distortion.csv" if distortion else None,
+            )
         return wcs
 
     def get_fastPRF(self, wavelength, temperature, res=7, sub_res=5):
@@ -264,3 +272,13 @@ class VisibleDetector(Detector):
             dtype="int",
         )
         return bkg
+
+    def apply_gain(self, values: u.Quantity):
+        """Applies a piecewise gain function"""
+        x = np.atleast_1d(values)
+        masks = np.asarray([(x >= 0 * u.DN) & (x < 1e3 * u.DN),
+                (x >= 1e3 * u.DN) & (x < 5e3 * u.DN),
+                (x >= 5e3 * u.DN) & (x < 2.8e4 * u.DN),
+                (x >= 2.8e4 * u.DN)])
+        gain = np.asarray([0.52, 0.6, 0.61, 0.67])*u.electron/u.DN
+        return (masks * x[None, :] * gain[:, None]).sum(axis=0)

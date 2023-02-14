@@ -155,6 +155,7 @@ def wavelength_to_rgb(wavelength, gamma=0.8):
 def get_jitter(
     xstd: float = 1,
     ystd: float = 0.3,
+    thetastd:float = 0.0005,
     correlation_time=1 * u.second,
     nframes=200,
     frame_time=0.2 * u.second,
@@ -168,6 +169,8 @@ def get_jitter(
         Standard deviation of jitter in pixels in x axis
     ystd: float
         Standard deviation of jitter in pixels in y axis
+    thetastd: float
+        Standard deviation of jitter in degrees in y axis
     correlation_time: float
         The timescale over which data is correlated in seconds.
         Increase this value for smoother time-series
@@ -183,9 +186,11 @@ def get_jitter(
     time : np.ndarray
         Time array in seconds
     x: np.ndarray
-        Jitter in the x axis
+        Jitter in the x axis in pixels
     y: np.ndarray
-        Jitter in the y axis
+        Jitter in the y axis in pixels
+    theta: np.ndarray
+        Jitter in angle in degrees
     """
     time = np.arange(nframes) * frame_time  # noqa:F811
     tstd = (correlation_time / frame_time).value
@@ -195,9 +200,9 @@ def get_jitter(
         return convolve(f, Gaussian1DKernel(tstd)) * tstd**0.5
 
     jitter = []
-    for idx, std in enumerate([xstd, ystd]):
+    for idx, std, unit in zip([0, 1, 2], [xstd, ystd, thetastd], [u.pixel, u.pixel, u.deg]):
         if seed is not None:
             np.random.seed(seed + idx)
-        jitter.append(jitter_func(std))
+        jitter.append(jitter_func(std) * unit)
 
-    return time, *jitter * u.pixel
+    return time, *jitter
