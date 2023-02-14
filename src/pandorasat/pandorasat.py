@@ -35,7 +35,7 @@ class PandoraSat:
         18.0 * u.um / u.pixel,
         2048 * u.pixel,
         2048 * u.pixel,
-#        0.5 * u.electron / u.DN,
+        #        0.5 * u.electron / u.DN,
         True,
     )
     VISDA = VisibleDetector(
@@ -44,14 +44,21 @@ class PandoraSat:
         6.5 * u.um / u.pixel,
         2048 * u.pixel,
         2048 * u.pixel,
-#        0.5 * u.electron / u.DN,
+        #        0.5 * u.electron / u.DN,
     )
     targetlist = pd.read_csv(f"{PACKAGEDIR}/data/targets.csv")
 
     def __repr__(self):
         return "Pandora Sat"
 
-    def get_sky_catalog(self, target_ra: u.Quantity, target_dec: u.Quantity, theta: u.Quantity, magnitude_range: tuple=(-3, 16), distortion: bool=True):
+    def get_sky_catalog(
+        self,
+        target_ra: u.Quantity,
+        target_dec: u.Quantity,
+        theta: u.Quantity,
+        magnitude_range: tuple = (-3, 16),
+        distortion: bool = True,
+    ):
         """Gets the source catalog of an input target
 
         Parameters
@@ -66,7 +73,20 @@ class PandoraSat:
         """
 
         # This is fixed for visda, for now
-        radius = np.min([(2 * self.VISDA.fieldstop_radius.to(u.deg).value ** 2) ** 0.5, (2 * ((2048 * u.pix * self.VISDA.pixel_scale).to(u.deg).value/2)**2)**0.5])
+        radius = np.min(
+            [
+                (2 * self.VISDA.fieldstop_radius.to(u.deg).value ** 2) ** 0.5,
+                (
+                    2
+                    * (
+                        (2048 * u.pix * self.VISDA.pixel_scale).to(u.deg).value
+                        / 2
+                    )
+                    ** 2
+                )
+                ** 0.5,
+            ]
+        )
         # catalog_data = Catalogs.query_object(target_name, radius=radius, catalog="TIC")
         # target_ra, target_dec = catalog_data[0][['ra', 'dec']].values()
 
@@ -81,12 +101,12 @@ class PandoraSat:
         ).T
         k = np.isfinite(ra) & np.isfinite(dec) & np.isfinite(mag)
         ra, dec, mag = ra[k], dec[k], mag[k]
-        vis_pix_coords = self.VISDA.wcs(target_ra, target_dec, theta, distortion=distortion).all_world2pix(
-            np.vstack([ra, dec]).T, 1
-        )
-        nir_pix_coords = self.NIRDA.wcs(target_ra, target_dec, theta, distortion=distortion).all_world2pix(
-            np.vstack([ra, dec]).T, 1
-        )
+        vis_pix_coords = self.VISDA.wcs(
+            target_ra, target_dec, theta, distortion=distortion
+        ).all_world2pix(np.vstack([ra, dec]).T, 1)
+        nir_pix_coords = self.NIRDA.wcs(
+            target_ra, target_dec, theta, distortion=distortion
+        ).all_world2pix(np.vstack([ra, dec]).T, 1)
 
         # we're assuming that Gaia B mag is very close to the Pandora visible magnitude
         vis_counts = np.zeros_like(mag)
@@ -127,23 +147,29 @@ class PandoraSat:
 
     def get_sky_images(
         self,
-        target_ra: u.Quantity, 
-        target_dec: u.Quantity, 
+        target_ra: u.Quantity,
+        target_dec: u.Quantity,
         theta: u.Quantity,
-        magnitude_range: tuple=(-3, 16),
-        distortion:bool = True,
+        magnitude_range: tuple = (-3, 16),
+        distortion: bool = True,
         wavelength=0.54 * u.micron,
         temperature=10 * u.deg_C,
         nreads=10,
         nt=40,
         xjitter_1sigma=2 * u.pixel,
         yjitter_1sigma=2 * u.pixel,
-        thetajitter_1sigma=0.0005*u.deg,
+        thetajitter_1sigma=0.0005 * u.deg,
         jitter_timescale=1 * u.second,
         include_noise=True,
         prf_func=None,
     ):
-        source_catalog = self.get_sky_catalog(target_ra=target_ra, target_dec=target_dec, theta=theta, magnitude_range=magnitude_range, distortion=distortion)
+        source_catalog = self.get_sky_catalog(
+            target_ra=target_ra,
+            target_dec=target_dec,
+            theta=theta,
+            magnitude_range=magnitude_range,
+            distortion=distortion,
+        )
         if prf_func is None:
             prf_func = self.VISDA.get_fastPRF(wavelength, temperature)
 
@@ -171,20 +197,34 @@ class PandoraSat:
 
         for jdx in range(nt * nreads):
             # Update the positions via the new WCS in each frame
-            vis_x, vis_y = self.VISDA.wcs(target_ra + (xj[jdx]*self.VISDA.pixel_scale).to(u.deg), target_dec + (yj[jdx]*self.VISDA.pixel_scale).to(u.deg), theta + thetaj[jdx], distortion=distortion).all_world2pix(
+            vis_x, vis_y = (
+                self.VISDA.wcs(
+                    target_ra + (xj[jdx] * self.VISDA.pixel_scale).to(u.deg),
+                    target_dec + (yj[jdx] * self.VISDA.pixel_scale).to(u.deg),
+                    theta + thetaj[jdx],
+                    distortion=distortion,
+                )
+                .all_world2pix(
                     np.vstack([source_catalog.ra, source_catalog.dec]).T, 1
-               ).T
+                )
+                .T
+            )
 
             for idx, s in source_catalog.iterrows():
-#            for idx in range(len(source_catalog)):
-                if (vis_x[idx] < 0) | (vis_x[idx] > 2048) | (vis_y[idx] < 0) | (vis_y[idx] > 2048):
+                #            for idx in range(len(source_catalog)):
+                if (
+                    (vis_x[idx] < 0)
+                    | (vis_x[idx] > 2048)
+                    | (vis_y[idx] < 0)
+                    | (vis_y[idx] > 2048)
+                ):
                     continue
 
                 x, y = (
                     xj[jdx].value + vis_x[idx] - self.VISDA.naxis1.value // 2,
                     yj[jdx].value + vis_y[idx] - self.VISDA.naxis2.value // 2,
                 )
-                
+
                 x1, y1, f = prf_func(x, y)
                 X, Y = np.asarray(
                     np.meshgrid(
@@ -192,7 +232,7 @@ class PandoraSat:
                         y1 + self.VISDA.naxis2.value // 2,
                     )
                 ).astype(int)
-#                print(X.mean(), Y.mean())
+                #                print(X.mean(), Y.mean())
                 k = (X >= 0) & (X < 2048) & (Y >= 0) & (Y < 2048)
                 science_image[jdx // nreads, Y[k], X[k]] += u.Quantity(
                     np.random.poisson(
@@ -238,4 +278,4 @@ class PandoraSat:
                 science_image[jdx] += u.Quantity(
                     noise, unit="electron", dtype=int
                 )
-        return time, xj, yj, science_image
+        return time, xj, yj, thetaj, science_image

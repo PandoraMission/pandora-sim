@@ -7,8 +7,7 @@ import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from astropy.io import fits, votable
-from astropy.wcs import WCS
+from astropy.io import votable
 
 from . import PACKAGEDIR
 from .detector import Detector
@@ -121,7 +120,11 @@ class VisibleDetector(Detector):
         return fig
 
     def wcs(
-        self, target_ra: u.Quantity, target_dec: u.Quantity, theta: u.Quantity, distortion: bool=True,
+        self,
+        target_ra: u.Quantity,
+        target_dec: u.Quantity,
+        theta: u.Quantity,
+        distortion: bool = True,
     ):
         """Get the World Coordinate System for a detector
 
@@ -143,7 +146,9 @@ class VisibleDetector(Detector):
                 target_ra=target_ra,
                 target_dec=target_dec,
                 theta=theta,
-                distortion_file=f"{PACKAGEDIR}/data/fov_distortion.csv" if distortion else None,
+                distortion_file=f"{PACKAGEDIR}/data/fov_distortion.csv"
+                if distortion
+                else None,
             )
         return wcs
 
@@ -276,9 +281,13 @@ class VisibleDetector(Detector):
     def apply_gain(self, values: u.Quantity):
         """Applies a piecewise gain function"""
         x = np.atleast_1d(values)
-        masks = np.asarray([(x >= 0 * u.DN) & (x < 1e3 * u.DN),
+        masks = np.asarray(
+            [
+                (x >= 0 * u.DN) & (x < 1e3 * u.DN),
                 (x >= 1e3 * u.DN) & (x < 5e3 * u.DN),
                 (x >= 5e3 * u.DN) & (x < 2.8e4 * u.DN),
-                (x >= 2.8e4 * u.DN)])
-        gain = np.asarray([0.52, 0.6, 0.61, 0.67])*u.electron/u.DN
+                (x >= 2.8e4 * u.DN),
+            ]
+        )
+        gain = np.asarray([0.52, 0.6, 0.61, 0.67]) * u.electron / u.DN
         return (masks * x[None, :] * gain[:, None]).sum(axis=0)

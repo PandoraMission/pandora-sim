@@ -10,6 +10,8 @@ import pandas as pd
 import requests
 from astropy.constants import c, h
 from astropy.convolution import Gaussian1DKernel, convolve
+from astropy.time import Time
+from astropy.io import fits
 
 from . import PACKAGEDIR
 
@@ -155,7 +157,7 @@ def wavelength_to_rgb(wavelength, gamma=0.8):
 def get_jitter(
     xstd: float = 1,
     ystd: float = 0.3,
-    thetastd:float = 0.0005,
+    thetastd: float = 0.0005,
     correlation_time=1 * u.second,
     nframes=200,
     frame_time=0.2 * u.second,
@@ -200,9 +202,25 @@ def get_jitter(
         return convolve(f, Gaussian1DKernel(tstd)) * tstd**0.5
 
     jitter = []
-    for idx, std, unit in zip([0, 1, 2], [xstd, ystd, thetastd], [u.pixel, u.pixel, u.deg]):
+    for idx, std, unit in zip(
+        [0, 1, 2], [xstd, ystd, thetastd], [u.pixel, u.pixel, u.deg]
+    ):
         if seed is not None:
             np.random.seed(seed + idx)
         jitter.append(jitter_func(std) * unit)
 
     return time, *jitter
+
+def get_flatfield(stddev=0.005, seed=777):
+    np.random.seed(seed)
+    """ This generates and writes a dummy flatfield file. """
+    hdr = fits.Header()
+    hdr['AUTHOR'] = "Christina Hedges"
+    hdr['VERSION'] = ps.__version__
+    hdr['DATE'] = Time.now().strftime('%d-%m-%Y')
+    hdr['STDDEV'] = stddev
+    hdu0 = fits.PrimaryHDU(header=hdr)
+    hdulist = fits.HDUList([hdu0,
+                            fits.CompImageHDU(data=np.random.normal(1, stddev, (2048, 2048)), name='FLAT')])
+    hdulist.writeto(f"{PACKAGEDIR}/data/flatfield_{Time.now().strftime('%d-%m-%Y')}.fits", overwrite=True, checksum=True)
+    return 

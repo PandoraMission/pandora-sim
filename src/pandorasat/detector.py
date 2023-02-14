@@ -40,7 +40,7 @@ class Detector(abc.ABC):
     pixel_size: float
     naxis1: int
     naxis2: int
-#    gain: float = 0.5 * u.electron / u.DN
+    #    gain: float = 0.5 * u.electron / u.DN
     transpose_psf: bool = False
 
     def __post_init__(self):
@@ -191,11 +191,8 @@ class Detector(abc.ABC):
         E = photon_energy(wavelength)
         telescope_area = np.pi * (Optics.mirror_diameter / 2) ** 2
         photon_flux_density = (
-            (telescope_area * sed * self.throughput(wavelength) / E).to(
-                u.photon / u.second / u.angstrom
-            )
-            * self.qe(wavelength)
-        )
+            telescope_area * sed * self.throughput(wavelength) / E
+        ).to(u.photon / u.second / u.angstrom) * self.qe(wavelength)
         sensitivity = photon_flux_density / sed
         return sensitivity
 

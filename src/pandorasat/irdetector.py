@@ -8,8 +8,6 @@ import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from astropy.io import fits
-from astropy.wcs import WCS
 from tqdm import tqdm
 
 from . import PACKAGEDIR
@@ -124,32 +122,38 @@ class NIRDetector(Detector):
     #     return wcs
 
     def wcs(
-            self, target_ra: u.Quantity, target_dec: u.Quantity, theta: u.Quantity, distortion: bool=True,
-        ):
-            """Get the World Coordinate System for a detector
+        self,
+        target_ra: u.Quantity,
+        target_dec: u.Quantity,
+        theta: u.Quantity,
+        distortion: bool = True,
+    ):
+        """Get the World Coordinate System for a detector
 
-            Parameters:
-            -----------
-            target_ra: astropy.units.Quantity
-                The target RA in degrees
-            target_dec: astropy.units.Quantity
-                The target Dec in degrees
-            theta: astropy.units.Quantity
-                The observatory angle in degrees
-            distortion_file: str
-                Optional file path to a distortion CSV file. See `wcs.read_distortion_file`
-            """
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                wcs = get_wcs(
-                    self,
-                    target_ra=target_ra,
-                    target_dec=target_dec,
-                    theta=theta,
-                    crpix1=2048-40,
-                    distortion_file=f"{PACKAGEDIR}/data/fov_distortion.csv" if distortion else None,
-                )
-            return wcs
+        Parameters:
+        -----------
+        target_ra: astropy.units.Quantity
+            The target RA in degrees
+        target_dec: astropy.units.Quantity
+            The target Dec in degrees
+        theta: astropy.units.Quantity
+            The observatory angle in degrees
+        distortion_file: str
+            Optional file path to a distortion CSV file. See `wcs.read_distortion_file`
+        """
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            wcs = get_wcs(
+                self,
+                target_ra=target_ra,
+                target_dec=target_dec,
+                theta=theta,
+                crpix1=2048 - 40,
+                distortion_file=f"{PACKAGEDIR}/data/fov_distortion.csv"
+                if distortion
+                else None,
+            )
+        return wcs
 
     def diagnose(
         self, n=4, npixels=20, image_type="psf", temperature=10 * u.deg_C
@@ -375,4 +379,4 @@ class NIRDetector(Detector):
 
     def apply_gain(self, values: u.Quantity):
         """Applies a single gain value"""
-        return values * 0.5 *u.electron/u.DN
+        return values * 0.5 * u.electron / u.DN

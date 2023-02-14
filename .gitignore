@@ -2,6 +2,7 @@ sandbox
 src/pandorasat/data/old
 src/pandorasat/data/pandora_*_20220506.*
 src/pandorasat/data/pandora_*_20210602.*
+src/pandorasat/data/flatfield*.fits
 
 # Mac things
 .DS_Store

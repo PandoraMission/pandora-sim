@@ -5,8 +5,6 @@ import numpy as np
 import pandas as pd
 from astropy.io import fits
 from astropy.wcs import WCS, Sip
-import matplotlib.pyplot as plt
-
 
 from .detector import Detector
 
@@ -132,12 +130,12 @@ def _get_distorted_wcs(
     See https://fits.gsfc.nasa.gov/registry/sip/SIP_distortion_v1_0.pdf for more information
     """
     # Original, undistorted WCS
-    wcs1 = WCS(hdr)
+    #    wcs1 = WCS(hdr)
     X, Y, Xp, Yp = read_distortion_file(detector, distortion_file)
-    # Rotation matrix from file
-    matrix = np.asarray(
-        [[hdr[f"PC{idx+1}_{jdx+1}"] for jdx in range(2)] for idx in range(2)]
-    )
+    # # Rotation matrix from file
+    # matrix = np.asarray(
+    #     [[hdr[f"PC{idx+1}_{jdx+1}"] for jdx in range(2)] for idx in range(2)]
+    # )
 
     # True pixel positions
     pix = np.vstack([X.ravel(), Y.ravel()]).T + np.asarray(
@@ -209,7 +207,6 @@ def _get_distorted_wcs(
     # ax[0].set_title("Input Pixels")
     # ax[1].set_title("Pixel -> Focal Plane")
     # ax[2].set_title("Pixel -> Focal Plane -> Pixel")
-
 
     # Check that the new correction distorts correctly
     if not np.all(
