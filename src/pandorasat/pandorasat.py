@@ -12,7 +12,7 @@ from . import PACKAGEDIR
 from .irdetector import NIRDetector
 from .optics import Optics
 from .orbit import Orbit
-from .utils import get_jitter, get_sky_catalog
+from .utils import get_jitter, get_sky_catalog, get_simple_cosmic_ray_image
 from .visibledetector import VisibleDetector
 
 
@@ -117,8 +117,7 @@ class PandoraSat:
             f = self.VISDA.flux_from_mag(m)
             vis_flux[idx] = f.value
             vis_counts[idx] = (f * s).to(u.DN / u.second).value
-        # Convert to electrons/second
-        self.VISDA.apply_gain(np.asarray(vis_counts) * u.DN).value
+
         source_catalog = pd.DataFrame(
             np.vstack(
                 [
@@ -162,6 +161,7 @@ class PandoraSat:
         jitter_timescale=1 * u.second,
         include_noise=True,
         prf_func=None,
+        cosmic_rays=True,
     ):
         source_catalog = self.get_sky_catalog(
             target_ra=target_ra,
@@ -236,15 +236,32 @@ class PandoraSat:
                 k = (X >= 0) & (X < 2048) & (Y >= 0) & (Y < 2048)
                 science_image[jdx // nreads, Y[k], X[k]] += u.Quantity(
                     np.random.poisson(
-                        f.T[k]
-                        * (
-                            (s.vis_counts * u.electron / u.second)
-                            * self.VISDA.integration_time.to(u.second)
+                        self.VISDA.apply_gain(
+                            f.T[k]
+                            * (
+                                (s.vis_counts * u.DN / u.second)
+                                * self.VISDA.integration_time.to(u.second)
+                            )
                         ).value
                     ),
                     unit="electron",
                     dtype=int,
                 )
+
+        if cosmic_rays:
+            # This is the worst rate we expect, from the SAA
+            cosmic_ray_rate = 1000/(u.second * u.cm**2)
+            cosmic_ray_expectation = (cosmic_ray_rate * ((self.VISDA.pixel_size * 2048 * u.pix)**2).to(u.cm**2) * self.VISDA.integration_time).value
+
+            for jdx in range(nt):
+                science_image[jdx] += get_simple_cosmic_ray_image(cosmic_ray_expectation=cosmic_ray_expectation, gain_function=self.VISDA.apply_gain)
+
+        # Apply the flat-field
+        science_image = u.Quantity(
+            science_image.value.astype(float) * self.VISDA.flat[None, :, :],
+            dtype=int,
+            unit="electron",
+        )
 
         # electrons in a read
         #        science_image *= u.electron

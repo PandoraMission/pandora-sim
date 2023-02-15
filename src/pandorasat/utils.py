@@ -14,6 +14,7 @@ from astropy.time import Time
 from astropy.io import fits
 
 from . import PACKAGEDIR
+from . import __version__
 
 
 def mast_query(request):
@@ -211,16 +212,104 @@ def get_jitter(
 
     return time, *jitter
 
+
 def get_flatfield(stddev=0.005, seed=777):
     np.random.seed(seed)
     """ This generates and writes a dummy flatfield file. """
-    hdr = fits.Header()
-    hdr['AUTHOR'] = "Christina Hedges"
-    hdr['VERSION'] = ps.__version__
-    hdr['DATE'] = Time.now().strftime('%d-%m-%Y')
-    hdr['STDDEV'] = stddev
-    hdu0 = fits.PrimaryHDU(header=hdr)
-    hdulist = fits.HDUList([hdu0,
-                            fits.CompImageHDU(data=np.random.normal(1, stddev, (2048, 2048)), name='FLAT')])
-    hdulist.writeto(f"{PACKAGEDIR}/data/flatfield_{Time.now().strftime('%d-%m-%Y')}.fits", overwrite=True, checksum=True)
-    return 
+    for detector in ["VISDA", "NIRDA"]:
+        hdr = fits.Header()
+        hdr["AUTHOR"] = "Christina Hedges"
+        hdr["VERSION"] = __version__
+        hdr["DATE"] = Time.now().strftime("%d-%m-%Y")
+        hdr["STDDEV"] = stddev
+        hdu0 = fits.PrimaryHDU(header=hdr)
+        hdulist = fits.HDUList(
+            [
+                hdu0,
+                fits.CompImageHDU(
+                    data=np.random.normal(1, stddev, (2048, 2048)), name="FLAT"
+                ),
+            ]
+        )
+        hdulist.writeto(
+            f"{PACKAGEDIR}/data/flatfield_{detector}_{Time.now().strftime('%Y-%m-%d')}.fits",
+            overwrite=True,
+            checksum=True,
+        )
+    return
+
+
+def get_simple_cosmic_ray_image(
+    cosmic_ray_expectation=0.4,
+    average_cosmic_ray_flux: u.Quantity = u.Quantity(1e3, unit="DN"),
+    cosmic_ray_distance: u.Quantity = u.Quantity(0.01, unit=u.pixel / u.DN),
+    image_shape=(2048, 2048),
+    gain_function=lambda x:x.value*u.electron,
+):
+    """Function to get a simple cosmic ray image
+
+    This function has no basis in physics at all. 
+    The rate of cosmic rays, the energy deposited, sampling distributions, all of it is completely without a basis in physics. 
+    All this function can do is put down fairly reasonable "tracks" that mimic the impact of cosmic rays, with some tuneable parameters to change the properties.
+
+    """
+    ncosmics = np.random.poisson(cosmic_ray_expectation)
+    im = np.zeros(image_shape, dtype=int)
+
+    for ray in np.arange(ncosmics):
+        # Random flux drawn from some exponential...
+        cosmic_ray_counts = (
+            np.random.exponential(average_cosmic_ray_flux.value)
+            * average_cosmic_ray_flux.unit
+        )
+
+        # Random location
+        xloc = np.random.uniform(0, image_shape[0])
+        yloc = np.random.uniform(0, image_shape[1])
+        # Random angle into the detector
+        theta = np.random.uniform(
+            -0.5 * np.pi, 0.5 * np.pi
+        )  # radians from the top of the sensor?
+        # Random angle around
+        phi = np.random.uniform(0, 2 * np.pi)
+
+        r = np.sin(theta) * (cosmic_ray_distance * cosmic_ray_counts).value
+
+        x1, x2, y1, y2 = (
+            xloc,
+            xloc + (r * np.cos(phi)),
+            yloc,
+            yloc + (r * np.sin(phi)),
+        )
+        m = (y2 - y1) / (x2 - x1)
+        c = y1 - (m * x1)
+        
+        xs, ys = np.sort([x1, x2]).astype(int), np.sort([y1, y2]).astype(int)
+        xs, ys = [xs[0], xs[1] if np.diff(xs) > 0 else xs[1] + 1], [
+            ys[0],
+            ys[1] if np.diff(ys) > 0 else ys[1] + 1,
+        ]
+
+        coords = np.vstack(
+            [
+                np.round(np.arange(*xs, 0.005)).astype(int),
+                np.round(m * np.arange(*xs, 0.005) + c).astype(int),
+            ]
+        ).T
+        coords = coords[(coords[:, 1] >= ys[0]) & (coords[:, 1] <= ys[1])]
+        if len(coords) == 0:
+            continue
+        fper_element = cosmic_ray_counts / len(coords)
+        coords = coords[
+            (
+                (coords[:, 0] >= 0)
+                & (coords[:, 0] < image_shape[0])
+                & (coords[:, 1] >= 0)
+                & (coords[:, 1] < image_shape[1])
+            )
+        ]
+        coords, wcoords = np.unique(coords, return_counts=True, axis=0)
+        im[coords[:, 0], coords[:, 1]] = np.random.poisson(
+            gain_function(wcoords * fper_element).value
+        )
+    return u.Quantity(im, dtype=int, unit=u.electron)

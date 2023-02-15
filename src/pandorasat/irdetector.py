@@ -9,15 +9,31 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+from astropy.io import fits
+from glob import glob
 
 from . import PACKAGEDIR
 from .detector import Detector
 from .psf import OutOfBoundsError
 from .utils import get_jitter
 from .wcs import get_wcs
+from . import PACKAGEDIR
+from .psf import PSF
 
 
 class NIRDetector(Detector):
+    def _setup(self):
+        """Some detector specific functions to run on initialization"""
+        self.psf = PSF.from_file(
+            f"{PACKAGEDIR}/data/pandora_nir_20220506.fits",
+            transpose=self.transpose_psf,
+        )
+        self.flat = fits.open(
+            np.sort(
+                np.atleast_1d(glob(f"{PACKAGEDIR}/data/flatfield_NIRDA*.fits"))
+            )[-1]
+        )[1].data
+
     @property
     def _dispersion_df(self):
         return pd.read_csv(f"{PACKAGEDIR}/data/pixel_vs_wavelength.csv")

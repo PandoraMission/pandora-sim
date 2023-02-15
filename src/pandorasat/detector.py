@@ -8,9 +8,7 @@ from dataclasses import dataclass
 import astropy.units as u
 import numpy as np
 
-from . import PACKAGEDIR
 from .optics import Optics
-from .psf import PSF
 from .utils import load_vega, photon_energy
 
 
@@ -44,21 +42,7 @@ class Detector(abc.ABC):
     transpose_psf: bool = False
 
     def __post_init__(self):
-        if self.name.lower() in ["visda", "vis", "visible", "v"]:
-            #    self.psf_fname = f"{PACKAGEDIR}/data/Pandora_vis.fits"
-            self.psf = PSF.from_file(
-                f"{PACKAGEDIR}/data/pandora_vis_20220506.fits",
-                transpose=self.transpose_psf,
-            )
-        elif self.name.lower() in ["nirda", "nir", "ir"]:
-            #    self.psf_fname = f"{PACKAGEDIR}/data/Pandora_nir.fits"
-            self.psf = PSF.from_file(
-                f"{PACKAGEDIR}/data/pandora_nir_20220506.fits",
-                transpose=self.transpose_psf,
-            )
-        else:
-            raise ValueError(f"No such detector as {self.name}")
-        #        self._get_psf()
+        self._setup()
         self.zeropoint = self._estimate_zeropoint()
         if hasattr(self, "fieldstop_radius"):
             C, R = (

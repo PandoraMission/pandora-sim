@@ -7,16 +7,31 @@ import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from astropy.io import votable
+from astropy.io import votable, fits
 
 from . import PACKAGEDIR
 from .detector import Detector
 from .psf import interpfunc
 from .wcs import get_wcs
+from . import PACKAGEDIR
+from .psf import PSF
+from glob import glob
 
 
 class VisibleDetector(Detector):
     """Pandora Visible Detector"""
+
+    def _setup(self):
+        """Some detector specific functions to run on initialization"""
+        self.psf = PSF.from_file(
+            f"{PACKAGEDIR}/data/pandora_vis_20220506.fits",
+            transpose=self.transpose_psf,
+        )
+        self.flat = fits.open(
+            np.sort(
+                np.atleast_1d(glob(f"{PACKAGEDIR}/data/flatfield_VISDA*.fits"))
+            )[-1]
+        )[1].data
 
     @property
     def _dispersion_df(self):

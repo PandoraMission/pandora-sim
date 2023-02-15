@@ -3,6 +3,7 @@
 - Added jitter in the observatory rotation angle as well as position
 - Increased field stop radius
 - Added variable gain
+- Added a very simple way to "simulate" cosmic rays
 
 
 # 0.1.2
