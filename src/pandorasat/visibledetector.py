@@ -1,22 +1,19 @@
 """Holds metadata and methods on Pandora VISDA"""
 # Standard library
 import warnings
+from glob import glob
 
 # Third-party
 import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from astropy.io import votable, fits
+from astropy.io import fits, votable
 
 from . import PACKAGEDIR
 from .detector import Detector
-from .psf import interpfunc
+from .psf import PSF, interpfunc
 from .wcs import get_wcs
-
-from . import PACKAGEDIR
-from .psf import PSF
-from glob import glob
 
 
 class VisibleDetector(Detector):
@@ -24,6 +21,7 @@ class VisibleDetector(Detector):
 
     def _setup(self):
         """Some detector specific functions to run on initialization"""
+        self.shape = (2048, 2048)
         self.psf = PSF.from_file(
             f"{PACKAGEDIR}/data/pandora_vis_20220506.fits",
             transpose=self.transpose_psf,
@@ -32,7 +30,7 @@ class VisibleDetector(Detector):
             np.sort(
                 np.atleast_1d(glob(f"{PACKAGEDIR}/data/flatfield_VISDA*.fits"))
             )[-1]
-        )[1].data[:, :1024]
+        )[1].data
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self.wcs = get_wcs(
@@ -40,8 +38,24 @@ class VisibleDetector(Detector):
                 target_ra=self.ra,
                 target_dec=self.dec,
                 theta=self.theta,
-                distortion_file=f"{PACKAGEDIR}/data/fov_distortion.csv"
+                distortion_file=f"{PACKAGEDIR}/data/fov_distortion.csv",
             )
+        if hasattr(self, "fieldstop_radius"):
+            C, R = (
+                np.mgrid[
+                    : self.shape[0],
+                    : self.shape[1],
+                ]
+                - np.hstack(
+                    [
+                        self.shape[0],
+                        self.shape[1],
+                    ]
+                )[:, None, None]
+                / 2
+            )
+            r = (self.fieldstop_radius / self.pixel_scale).to(u.pix).value
+            self.fieldstop = ~((np.abs(C) >= r) | (np.abs(R) >= r))
 
     @property
     def _dispersion_df(self):
@@ -215,7 +229,9 @@ class VisibleDetector(Detector):
                 for jdx, row in enumerate(np.arange(0, 1, 1 / res)):
                     y1, x1, ar = self.psf.prf(prf_point, location=(row, col))
                     k = np.asarray(
-                        np.meshgrid(np.in1d(ys, y1), np.in1d(xs, x1), indexing='ij')
+                        np.meshgrid(
+                            np.in1d(ys, y1), np.in1d(xs, x1), indexing="ij"
+                        )
                     ).all(axis=0)
                     grid[jdx, idx, k] = ar.ravel()
             return grid

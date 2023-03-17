@@ -10,11 +10,10 @@ import pandas as pd
 import requests
 from astropy.constants import c, h
 from astropy.convolution import Gaussian1DKernel, convolve
-from astropy.time import Time
 from astropy.io import fits
+from astropy.time import Time
 
-from . import PACKAGEDIR
-from . import __version__
+from . import PACKAGEDIR, __version__
 
 
 def mast_query(request):
@@ -244,13 +243,14 @@ def get_simple_cosmic_ray_image(
     average_cosmic_ray_flux: u.Quantity = u.Quantity(1e3, unit="DN"),
     cosmic_ray_distance: u.Quantity = u.Quantity(0.01, unit=u.pixel / u.DN),
     image_shape=(2048, 2048),
-    gain_function=lambda x:x.value*u.electron,
+    gain_function=lambda x: x.value * u.electron,
 ):
     """Function to get a simple cosmic ray image
 
-    This function has no basis in physics at all. 
-    The rate of cosmic rays, the energy deposited, sampling distributions, all of it is completely without a basis in physics. 
-    All this function can do is put down fairly reasonable "tracks" that mimic the impact of cosmic rays, with some tuneable parameters to change the properties.
+    This function has no basis in physics at all.
+    The rate of cosmic rays, the energy deposited, sampling distributions, all of it is completely without a basis in physics.
+    All this function can do is put down fairly reasonable "tracks" that mimic the impact of cosmic rays,
+    with some tuneable parameters to change the properties.
 
     """
     ncosmics = np.random.poisson(cosmic_ray_expectation)
@@ -283,7 +283,7 @@ def get_simple_cosmic_ray_image(
         )
         m = (y2 - y1) / (x2 - x1)
         c = y1 - (m * x1)
-        
+
         xs, ys = np.sort([x1, x2]).astype(int), np.sort([y1, y2]).astype(int)
         xs, ys = [xs[0], xs[1] if np.diff(xs) > 0 else xs[1] + 1], [
             ys[0],

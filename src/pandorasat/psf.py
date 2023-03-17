@@ -66,36 +66,48 @@ class PSF(object):
         pixel_size = hdu[0].header["PIXSIZE"] * u.micron / u.pix
         sub_pixel_size = hdu[0].header["SUBPIXSZ"] * u.micron / u.pix
 
-#         psf_flux = hdu[1].data
+        #         psf_flux = hdu[1].data
 
-#         psf_flux = psf_flux.transpose([1, 0, *np.arange(2, psf_flux.ndim)])
+        #         psf_flux = psf_flux.transpose([1, 0, *np.arange(2, psf_flux.ndim)])
 
-#         # # Testing
-# #        psf_flux = psf_flux[:, :-10]
-#         if transpose:
-#             psf_flux = psf_flux.transpose([1, 0, *np.arange(2, psf_flux.ndim)])
-#         dimension_names = [i.name.lower() for i in hdu[2:]]
-#         replace = {'x':'column', 'y':'row'}
-#         dimension_names = [replace[n] if n in replace else n for n in dimension_names]
-#         dimension_units = [u.Unit(i.header["UNIT"]) for i in hdu[2:]]
-#         X = [i.data * u.Unit(i.header["UNIT"]) for i in hdu[2:]]
+        #         # # Testing
+        # #        psf_flux = psf_flux[:, :-10]
+        #         if transpose:
+        #             psf_flux = psf_flux.transpose([1, 0, *np.arange(2, psf_flux.ndim)])
+        #         dimension_names = [i.name.lower() for i in hdu[2:]]
+        #         replace = {'x':'column', 'y':'row'}
+        #         dimension_names = [replace[n] if n in replace else n for n in dimension_names]
+        #         dimension_units = [u.Unit(i.header["UNIT"]) for i in hdu[2:]]
+        #         X = [i.data * u.Unit(i.header["UNIT"]) for i in hdu[2:]]
 
+        #         # LLNL's matlab files are COLUMN-major
+        #         # This should make the array ROW-major
+        replace = {"x": "column", "y": "row"}
+        dimension_names = [
+            replace[i.name.lower()]
+            if i.name.lower() in replace
+            else i.name.lower()
+            for i in hdu[2:]
+        ]
 
-#         # LLNL's matlab files are COLUMN-major
-#         # This should make the array ROW-major
-        replace = {'x':'column', 'y':'row'}
-        dimension_names = [replace[i.name.lower()] if i.name.lower() in replace else i.name.lower() for i in hdu[2:]]
-
-        if 'row' in dimension_names:
-            l = (np.where(np.asarray(dimension_names) == 'row')[0][0], np.where(np.asarray(dimension_names) == 'column')[0][0])
-            l = np.hstack([l, list(set(list(np.arange(len(hdu) - 2))) - set(l))])    
+        if "row" in dimension_names:
+            l = (
+                np.where(np.asarray(dimension_names) == "row")[0][0],
+                np.where(np.asarray(dimension_names) == "column")[0][0],
+            )
+            l = np.hstack(
+                [l, list(set(list(np.arange(len(hdu) - 2))) - set(l))]
+            )
         else:
-            l = np.arange(len(hdu) - 2) 
-            
-        psf_flux = hdu[1].data.transpose(np.hstack([1, 0, *l+2]))[:, :-10]
+            l = np.arange(len(hdu) - 2)
+
+        psf_flux = hdu[1].data.transpose(np.hstack([1, 0, *l + 2]))[:, :-10]
         dimension_names = [dimension_names[l1] for l1 in l]
         dimension_units = [u.Unit(hdu[l1].header["UNIT"]) for l1 in l + 2]
-        X = [hdu[l1].data.transpose(l) * u.Unit(hdu[l1].header["UNIT"]) for l1 in l + 2]
+        X = [
+            hdu[l1].data.transpose(l) * u.Unit(hdu[l1].header["UNIT"])
+            for l1 in l + 2
+        ]
 
         return PSF(
             X,

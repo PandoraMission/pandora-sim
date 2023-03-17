@@ -39,48 +39,34 @@ class Detector(abc.ABC):
     theta: u.Quantity
     pixel_scale: float
     pixel_size: float
-    shape: tuple
     #    gain: float = 0.5 * u.electron / u.DN
     transpose_psf: bool = False
 
     def __post_init__(self):
         self._setup()
         self.zeropoint = self._estimate_zeropoint()
-        if hasattr(self, "fieldstop_radius"):
-            C, R = (
-                np.mgrid[
-                    : self.shape[0],
-                    : self.shape[1],
-                ]
-                - np.hstack(
-                    [
-                        self.shape[0],
-                        self.shape[1],
-                    ]
-                )[:, None, None]
-                / 2
-            )
-            r = (self.fieldstop_radius / self.pixel_scale).to(u.pix).value
-            self.fieldstop = ~((np.abs(C) >= r) | (np.abs(R) >= r))
-
 
     @property
     def naxis1(self):
         """WCS's are COLUMN major, so naxis1 is the number of columns"""
-        return self.shape[1]*u.pixel
+        return self.shape[1] * u.pixel
 
     @property
     def naxis2(self):
         """WCS's are COLUMN major, so naxis2 is the number of rows"""
-        return self.shape[0]*u.pixel
+        return self.shape[0] * u.pixel
 
     def world_to_pixel(self, ra, dec, distortion=True):
         """Helper function.
-        
+
         This function ensures we keep the row-major convention in pandora-sat.
         """
-        coords = np.vstack([ra.to(u.deg).value if isinstance(ra, u.Quantity) else ra, 
-                    dec.to(u.deg).value if isinstance(dec, u.Quantity) else dec]).T 
+        coords = np.vstack(
+            [
+                ra.to(u.deg).value if isinstance(ra, u.Quantity) else ra,
+                dec.to(u.deg).value if isinstance(dec, u.Quantity) else dec,
+            ]
+        ).T
         if distortion:
             column, row = self.wcs.all_world2pix(coords, 0).T
         else:
@@ -89,11 +75,17 @@ class Detector(abc.ABC):
 
     def pixel_to_world(self, row, column, distortion=True):
         """Helper function.
-        
+
         This function ensures we keep the row-major convention in pandora-sat.
         """
-        coords = np.vstack([column.to(u.pixel).value if isinstance(column, u.Quantity) else column, 
-                    row.to(u.pixel).value if isinstance(row, u.Quantity) else row]).T 
+        coords = np.vstack(
+            [
+                column.to(u.pixel).value
+                if isinstance(column, u.Quantity)
+                else column,
+                row.to(u.pixel).value if isinstance(row, u.Quantity) else row,
+            ]
+        ).T
         if distortion:
             return self.wcs.all_pix2world(coords, 0).T * u.deg
         else:

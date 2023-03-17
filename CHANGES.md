@@ -1,3 +1,8 @@
+# 0.3
+- Changed API to enforce row-major indexing everywhere
+- Added `conventions.ipynb` documentation to state conventions
+
+
 # 0.2.0
 - Added ability to create a distorted WCS
 - Added jitter in the observatory rotation angle as well as position
