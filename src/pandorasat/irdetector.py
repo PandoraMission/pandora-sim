@@ -6,6 +6,7 @@ import warnings
 # Third-party
 import astropy.units as u
 import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -15,8 +16,9 @@ from glob import glob
 from . import PACKAGEDIR
 from .detector import Detector
 from .psf import OutOfBoundsError
-from .utils import get_jitter
 from .wcs import get_wcs
+
+from .utils import get_jitter
 from . import PACKAGEDIR
 from .psf import PSF
 
@@ -33,14 +35,30 @@ class NIRDetector(Detector):
                 np.atleast_1d(glob(f"{PACKAGEDIR}/data/flatfield_NIRDA*.fits"))
             )[-1]
         )[1].data
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            self.wcs = get_wcs(
+                self,
+                target_ra=self.ra,
+                target_dec=self.dec,
+                theta=self.theta,
+                crpix1=80,
+                distortion_file=f"{PACKAGEDIR}/data/fov_distortion.csv"
+            )
+
+        # ROW COLUMN JUST LIKE PYTHON
+        self.subarray_size = (400, 80)
+        self.subarray_center = (self.wcs.wcs.crpix[1], self.wcs.wcs.crpix[0])
+        crpix = self.wcs.wcs.crpix
+        self.subarray_corner = crpix[1] - self.subarray_size[0]/2, crpix[0] - self.subarray_size[1]/2
+        # COLUMN, ROW
+        self.subarray_row, self.subarray_column = np.meshgrid(crpix[1] + np.arange(self.subarray_size[0]) - self.subarray_size[0]/2,
+                                    crpix[0] + np.arange(self.subarray_size[1]) - self.subarray_size[1]/2, indexing='ij')
+        self.trace_range = [-200, 100]
 
     @property
     def _dispersion_df(self):
         return pd.read_csv(f"{PACKAGEDIR}/data/pixel_vs_wavelength.csv")
-
-    @property
-    def subarray_size(self):
-        return (80, 400)
 
     @property
     def pixel_read_time(self):
@@ -137,39 +155,39 @@ class NIRDetector(Detector):
     #         wcs = WCS(hdu.header)
     #     return wcs
 
-    def wcs(
-        self,
-        target_ra: u.Quantity,
-        target_dec: u.Quantity,
-        theta: u.Quantity,
-        distortion: bool = True,
-    ):
-        """Get the World Coordinate System for a detector
+    # def wcs(
+    #     self,
+    #     target_ra: u.Quantity,
+    #     target_dec: u.Quantity,
+    #     theta: u.Quantity,
+    #     distortion: bool = True,
+    # ):
+    #     """Get the World Coordinate System for a detector
 
-        Parameters:
-        -----------
-        target_ra: astropy.units.Quantity
-            The target RA in degrees
-        target_dec: astropy.units.Quantity
-            The target Dec in degrees
-        theta: astropy.units.Quantity
-            The observatory angle in degrees
-        distortion_file: str
-            Optional file path to a distortion CSV file. See `wcs.read_distortion_file`
-        """
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            wcs = get_wcs(
-                self,
-                target_ra=target_ra,
-                target_dec=target_dec,
-                theta=theta,
-                crpix1=2048 - 40,
-                distortion_file=f"{PACKAGEDIR}/data/fov_distortion.csv"
-                if distortion
-                else None,
-            )
-        return wcs
+    #     Parameters:
+    #     -----------
+    #     target_ra: astropy.units.Quantity
+    #         The target RA in degrees
+    #     target_dec: astropy.units.Quantity
+    #         The target Dec in degrees
+    #     theta: astropy.units.Quantity
+    #         The observatory angle in degrees
+    #     distortion_file: str
+    #         Optional file path to a distortion CSV file. See `wcs.read_distortion_file`
+    #     """
+    #     with warnings.catch_warnings():
+    #         warnings.simplefilter("ignore")
+    #         wcs = get_wcs(
+    #             self,
+    #             target_ra=target_ra,
+    #             target_dec=target_dec,
+    #             theta=theta,
+    #             crpix1=2048 - 40,
+    #             distortion_file=f"{PACKAGEDIR}/data/fov_distortion.csv"
+    #             if distortion
+    #             else None,
+    #         )
+    #     return wcs
 
     def diagnose(
         self, n=4, npixels=20, image_type="psf", temperature=10 * u.deg_C
@@ -190,20 +208,20 @@ class NIRDetector(Detector):
             jdx = ndx % n
             idx = (ndx - jdx) // n
             if image_type.lower() == "psf":
-                x, y, f = (
-                    self.psf.psf_x.value,
-                    self.psf.psf_y.value,
+                y, x, f = (
+                    self.psf.psf_row.value,
+                    self.psf.psf_column.value,
                     self.psf.psf([wavs[ndx], temperature]),
                 )
                 ax[idx, jdx].set(xticklabels=[], yticklabels=[])
             elif image_type.lower() == "prf":
-                x, y, f = self.psf.prf(
+                y, x, f = self.psf.prf(
                     [wavs[ndx], temperature], location=[0, 0]
                 )
             im = ax[idx, jdx].pcolormesh(
                 x,
                 y,
-                f.T,
+                f,
                 vmin=0,
                 vmax=[0.1 if image_type.lower() == "prf" else 0.01][0],
             )
@@ -232,7 +250,7 @@ class NIRDetector(Detector):
         wavelength,
         spectrum,
         pixel_resolution=2,
-        target_center=(40, 250),
+        target_center=(250, 40),
         temperature=-10 * u.deg_C,
     ):
         """Calculates the electrons per second from a source in a subarray
@@ -298,13 +316,13 @@ class NIRDetector(Detector):
             # Build the PRF at this wavelength
             #            x, y, prf = self._bin_prf(wavelength=wav[pdx], center=(pix[pdx], 0))
             try:
-                x, y, prf = self.psf.prf(
-                    [wav[pdx], temperature], location=(pix[pdx] + xc, yc)
+                y, x, prf = self.psf.prf(
+                    [wav[pdx], temperature], location=(pix[pdx] + yc, xc)
                 )
             except OutOfBoundsError:
                 continue
             # Assign to each pixel
-            Y, X = np.meshgrid(y, x)
+            Y, X = np.meshgrid(y, x, indexing='ij')
             k = (X > 0) & (Y > 0) & (X < ar.shape[1]) & (Y < ar.shape[0])
             ar[Y[k], X[k]] += np.nan_to_num(prf[k] * integral.value)
         ar = self.apply_gain(ar * u.DN)
@@ -396,3 +414,202 @@ class NIRDetector(Detector):
     def apply_gain(self, values: u.Quantity):
         """Applies a single gain value"""
         return values * 0.5 * u.electron / u.DN
+
+
+    def get_trace_positions(self, ra, dec, pixel_resolution=2, plot=False):
+        """Finds the position of a trace, accounting for WCS distortions
+        
+        Parameters
+        ----------
+        
+        
+        Returns
+        -------
+        
+        
+        """
+                
+        # ROW COLUMN
+        # Includes the distortion to the POSITION of the trace due to the WCS 
+        #p1_0, p2_0 = self.wcs.all_world2pix([[ra.value, dec.value]], 0)[0].T        
+        p1_0, p2_0 = self.world_to_pixel(ra, dec)      
+        dp = 1 / pixel_resolution
+        p_range = np.arange(self.trace_range[0], self.trace_range[1], dp) + dp / 2
+        
+        # CH: This code was when we thought the WCS distortion applied to the trace
+        # Is there any distortion from the prism?
+        # # positions of trace
+        # p1, p2 = p1_0 + p_range, p2_0 + np.zeros_like(p_range)
+        # # Focal plane positions of trace
+        # f1, f2 = p1 - self.wcs.wcs.crpix[0], p2 - self.wcs.wcs.crpix[1]
+        # # Distorted pixel positions of traces
+        # l1, l2 = self.wcs.sip_foc2pix(np.vstack([f1, f2]).T, 0).T    
+
+
+        # positions of trace
+        l1, l2 = p1_0 + p_range, p2_0 + np.zeros_like(p_range)
+
+        #Exagerate
+#        l2 = (8*(l2 - self.wcs.wcs.crpix[1])) + self.wcs.wcs.crpix[1]
+        if plot:
+            fig, ax = plt.subplots()
+            ax.plot(l2, l1, zorder=10, c='k', label='Trace')
+            ax.scatter(p2_0, p1_0, zorder=10, c='k', label='Source Position')
+            ax.add_patch(Rectangle((0, 0), 2048, 2048, edgecolor='k', facecolor='w', label='Detector Edge'))
+            ax.add_patch(Rectangle(self.subarray_corner[::-1], *self.subarray_size[::-1], alpha=0.4, color='C3', label='Subarray'))
+            ax.set_aspect(1)
+            ax.set(xlabel='Pixel Column', ylabel='Pixel Row', xlim=(-2*self.subarray_size[1], 3*self.subarray_size[1]), ylim=(-self.subarray_size[0]/2+self.subarray_corner[0], 1.5*self.subarray_size[0]+self.subarray_corner[0]), title='Trace Plot')
+            ax.legend(frameon=True)
+        return np.asarray([l1, l2]).T
+
+    def get_fasttrace(self, ra:u.Quantity=None, dec:u.Quantity=None, npix:int=2, temperature:u.Quantity=10*u.deg_C, sub_res:int=3):
+        """Returns a function to evaluate the trace on the IR channel -FAST-
+        
+        This trace will be fixed to the WCS solution at the given RA and Dec, but can be evaluated anywhere on the detector.
+        
+        Parameters
+        ----------
+        
+        ra: astropy.units.Quantity
+            The RA to build the WCS solution at in degrees
+        dec: astropy.units.Quantity
+            The Declination to build the WCS solution at in degrees
+        npix: int 
+            The number of PRFs to evaluate per pixel. Higher numbers are slower, but more accurate.
+        temperature: astropy.units.Quantity
+            Temperature to use for the PRF in degrees C
+        sub_res: int
+            The number of sub-pixel resolution elements in the returned PRF model. Higher numbers are slower, but more accurate.
+            
+        Returns
+        -------
+        
+        fastprf: function
+            A function to evaluate the PRF at any point on the detector. 
+        """
+        
+        if ra is None:
+            ra = self.ra
+        if dec is None:
+            dec = self.dec
+            
+        # Distorted pixel positions
+        l = (self.get_trace_positions(ra, dec, pixel_resolution=npix) - self.world_to_pixel(ra, dec).T).T
+
+        # Wavelengths
+        wav = self.pixel_to_wavelength(np.arange(
+            self.trace_range[0],
+            self.trace_range[1],
+            1/npix,
+        )*u.pixel).value
+        
+        wav_edges = np.vstack([self.pixel_to_wavelength(np.arange(
+                    self.trace_range[0] - 0.5,
+                    self.trace_range[1] - 0.5,
+                    1/(npix),
+                )*u.pixel).value, 
+                self.pixel_to_wavelength(np.arange(
+                    self.trace_range[0] + 0.5,
+                    self.trace_range[1] + 0.5,
+                    1/(npix),
+                )*u.pixel).value]).T
+        
+        k = np.isfinite(wav) & (wav > self.psf.wavelength1d.min().value) & (wav < self.psf.wavelength1d.max().value)
+        wav, wav_edges, l = wav[k], wav_edges[k], l[:, k]
+
+        xs = np.arange(
+            int(np.floor(self.psf.psf_column.min().value + l[1].min())) - 1,
+            int(np.ceil(self.psf.psf_column.max().value + l[1].max())) + 2,
+            1,
+        )
+        ys = np.arange(
+            int(np.floor(self.psf.psf_row.min().value) + l[0].min()) - 1,
+            int(np.ceil(self.psf.psf_row.max().value) + l[0].max()) + 2,
+            1,
+        )
+        xp, yp = np.arange(0, 1, 1 / sub_res), np.arange(0, 1, 1 / sub_res)
+
+        grid = np.zeros((sub_res, sub_res, wav.shape[0], ys.shape[0], xs.shape[0]))
+        jdx, kdx = 0, 0
+        for kdx in tqdm(range(yp.shape[0]), total=sub_res, desc='Building fasttrace', leave=True, position=0):
+            for jdx in range(xp.shape[0]):
+                for idx, w in enumerate(wav):
+                    y1, x1, ar = self.psf.prf((w, temperature), location=(yp[jdx] + l[0][idx], xp[kdx] + l[1][idx]))
+                    ar /= ar.sum()
+                    k = np.asarray(
+                        np.meshgrid(np.in1d(ys, y1), np.in1d(xs, x1), indexing='ij')
+                    ).all(axis=0)
+                    # need to integrate here to get correct units! self.sensitivity(w*u.micron)/npix
+                    grid[kdx, jdx, idx, k] = ar[np.asarray(np.meshgrid(np.in1d(y1, ys), np.in1d(x1, xs), indexing='ij')).all(axis=0)] #* self.sensitivity(w*u.micron)/npix
+
+        # ADD wavelength and spectrum here to take care of integration properly?
+        def fasttrace(rowloc: float, colloc: float):
+            """Function to get the PRF.
+
+            Parameters
+            ----------
+            rowloc: float
+                y location on the detector
+            colloc: float
+                x location on the detector
+
+            Returns
+            -------
+            w: np.ndarray
+                wavelength of every PRF in the trace stack
+            row: np.ndarray
+                y location on the detector
+            col: np.ndarray
+                x location on the detector
+            prf : np.ndarray
+                3D flux of the PRF on the detector. Sum down first axis to create a summed trace.
+            """
+            return (
+                wav_edges,
+                ys + (rowloc - (rowloc % 1)),
+                xs + (colloc - (colloc % 1)),
+                grid[np.argmin(np.abs(yp - (rowloc % 1))),
+                    np.argmin(np.abs(xp - (colloc % 1))),
+                    :,
+                    :,
+                    :,
+                ],
+            )
+        return fasttrace
+
+    def get_integrated_spectrum(self, wav, spec, wav_edges, plot=False):
+        """Given an input spectrum will get the integrated spectrum
+        
+        Pass wav_edges to define the bounds of the integration"""
+        spectrum = spec.to(u.erg/(u.micron*u.second*u.cm**2)).value
+        sensitivity = self.sensitivity(wav).value
+        wavelength = wav.to(u.micron).value
+        unit_convert = (1 * wav.unit * spec.unit * self.sensitivity(wav[0]).unit).to(
+                    u.DN / u.second
+                )
+        integral = np.zeros(wav_edges.shape[0])
+        for pdx in range(len(wav_edges)):
+            k = (wavelength > wav_edges[pdx][0]) & (
+                            wavelength < wav_edges[pdx][1]
+                        )
+            wp = np.hstack(
+                            [
+                                wav_edges[pdx][0] + 1e-12,
+                                wavelength[k],
+                                wav_edges[pdx][1] - 1e-12,
+                            ]
+                        )
+
+            sp = np.interp(wp, wavelength, spectrum * sensitivity)
+            integral[pdx] = np.trapz(
+                    np.hstack([0, sp, 0]),
+                    np.hstack(
+                        [
+                            wav_edges[pdx][0],
+                            wp,
+                            wav_edges[pdx][1],
+                        ]
+                    ),
+                )
+        integral = integral * unit_convert
+        return integral

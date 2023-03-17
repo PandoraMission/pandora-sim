@@ -64,18 +64,39 @@ class PSF(object):
         """
         hdu = fits.open(filename)
         pixel_size = hdu[0].header["PIXSIZE"] * u.micron / u.pix
-        psf_flux = hdu[1].data
-
-        # I think this makes it the right way round
-        psf_flux = psf_flux.transpose([1, 0, *np.arange(2, psf_flux.ndim)])
-        # # Testing
-        psf_flux = psf_flux[:, :-10]
-        if transpose:
-            psf_flux = psf_flux.transpose([1, 0, *np.arange(2, psf_flux.ndim)])
         sub_pixel_size = hdu[0].header["SUBPIXSZ"] * u.micron / u.pix
-        dimension_names = [i.name.lower() for i in hdu[2:]]
-        dimension_units = [u.Unit(i.header["UNIT"]) for i in hdu[2:]]
-        X = [i.data * u.Unit(i.header["UNIT"]) for i in hdu[2:]]
+
+#         psf_flux = hdu[1].data
+
+#         psf_flux = psf_flux.transpose([1, 0, *np.arange(2, psf_flux.ndim)])
+
+#         # # Testing
+# #        psf_flux = psf_flux[:, :-10]
+#         if transpose:
+#             psf_flux = psf_flux.transpose([1, 0, *np.arange(2, psf_flux.ndim)])
+#         dimension_names = [i.name.lower() for i in hdu[2:]]
+#         replace = {'x':'column', 'y':'row'}
+#         dimension_names = [replace[n] if n in replace else n for n in dimension_names]
+#         dimension_units = [u.Unit(i.header["UNIT"]) for i in hdu[2:]]
+#         X = [i.data * u.Unit(i.header["UNIT"]) for i in hdu[2:]]
+
+
+#         # LLNL's matlab files are COLUMN-major
+#         # This should make the array ROW-major
+        replace = {'x':'column', 'y':'row'}
+        dimension_names = [replace[i.name.lower()] if i.name.lower() in replace else i.name.lower() for i in hdu[2:]]
+
+        if 'row' in dimension_names:
+            l = (np.where(np.asarray(dimension_names) == 'row')[0][0], np.where(np.asarray(dimension_names) == 'column')[0][0])
+            l = np.hstack([l, list(set(list(np.arange(len(hdu) - 2))) - set(l))])    
+        else:
+            l = np.arange(len(hdu) - 2) 
+            
+        psf_flux = hdu[1].data.transpose(np.hstack([1, 0, *l+2]))[:, :-10]
+        dimension_names = [dimension_names[l1] for l1 in l]
+        dimension_units = [u.Unit(hdu[l1].header["UNIT"]) for l1 in l + 2]
+        X = [hdu[l1].data.transpose(l) * u.Unit(hdu[l1].header["UNIT"]) for l1 in l + 2]
+
         return PSF(
             X,
             psf_flux,
@@ -125,13 +146,13 @@ class PSF(object):
                 midpoint = midpoint[len(midpoint) // 2]
                 setattr(self, self.dimension_names[dim] + "0d", midpoint)
 
-        self.psf_x = (
-            (np.arange(self.shape[0]) - self.shape[0] // 2)
+        self.psf_column = (
+            (np.arange(self.shape[1]) - self.shape[1] // 2)
             * u.pixel
             * self.sub_pixel_size
         ) / self.pixel_size
-        self.psf_y = (
-            (np.arange(self.shape[1]) - self.shape[1] // 2)
+        self.psf_row = (
+            (np.arange(self.shape[0]) - self.shape[0] // 2)
             * u.pixel
             * self.sub_pixel_size
         ) / self.pixel_size
@@ -215,18 +236,28 @@ class PSF(object):
             The point to interpolate at, in `self.dimension_names`
         location: tuple
             The location in pixels on the detector. Must be two pixel values.
+            THIS IS ROW MAJOR. Pass (ROW, COLUMN)
         freeze_dimensions: None, int, str or list
             Pass a list with the dimensions you want to "freeze", i.e. set the PSF shape to the midpoint value.
             Freezing a dimension will make this calculation faster, as it won't be interpolated. You can pass
             either integers for the dimensions, or names from `self.dimension_names`.
+
+        Returns
+        -------
+        row: np.ndarray
+            Array of integer row positions
+        column: np.ndarray
+            Array of integer column positions
+        psf: np.ndarray
+            2D array of PRF flux values with shape (nrows, ncolumns)
         """
 
         if location is None:
-            xloc = np.where(np.in1d(self.dimension_names, "x"))[0]
-            yloc = np.where(np.in1d(self.dimension_names, "y"))[0]
-            if (len(xloc) == 0) | (len(yloc) == 0):
+            rowloc = np.where(np.in1d(self.dimension_names, "row"))[0]
+            colloc = np.where(np.in1d(self.dimension_names, "column"))[0]
+            if (len(rowloc) == 0) | (len(colloc) == 0):
                 raise ValueError("Please provide location data.")
-            location = [point[xloc[0]], point[yloc[0]]]
+            location = [point[rowloc[0]], point[colloc[0]]]
         if len(location) != 2:
             raise ValueError("Pass a 2D location in pixels")
         location = [
@@ -234,23 +265,23 @@ class PSF(object):
             u.Quantity(location[1], "pixel"),
         ]
 
-        mod = (self.psf_x.value + location[0].value) % 1
-        cyc = (self.psf_x.value + location[0].value) - mod
-        xbin = np.unique(cyc)
+        mod = (self.psf_column.value + location[1].value) % 1
+        cyc = (self.psf_column.value + location[1].value) - mod
+        colbin = np.unique(cyc)
         psf0 = self.psf(point, freeze_dimensions=freeze_dimensions)
         psf1 = np.asarray(
-            [psf0[cyc == c, :].sum(axis=0) / (cyc == c).sum() for c in xbin]
-        )
-        mod = (self.psf_y.value + location[1].value) % 1
-        cyc = (self.psf_y.value + location[1].value) - mod
-        ybin = np.unique(cyc)
-        psf2 = np.asarray(
-            [psf1[:, cyc == c].sum(axis=1) / (cyc == c).sum() for c in ybin]
+            [psf0[:, cyc == c].sum(axis=1) / (cyc == c).sum() for c in colbin]
         ).T
+        mod = (self.psf_row.value + location[0].value) % 1
+        cyc = (self.psf_row.value + location[0].value) - mod
+        rowbin = np.unique(cyc)
+        psf2 = np.asarray(
+            [psf1[cyc == c].sum(axis=0) / (cyc == c).sum() for c in rowbin]
+        )
         # We need to renormalize psf2 here
-        psf2 /= np.trapz(np.trapz(psf2, ybin, axis=1), xbin)
+        psf2 /= np.trapz(np.trapz(psf2, colbin, axis=1), rowbin)
 
-        return xbin.astype(int), ybin.astype(int), psf2
+        return rowbin.astype(int), colbin.astype(int), psf2
 
     def __repr__(self):
         return f"{self.ndims}D PSF Model [{', '.join(self.dimension_names)}]"

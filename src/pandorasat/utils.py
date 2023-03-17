@@ -156,8 +156,8 @@ def wavelength_to_rgb(wavelength, gamma=0.8):
 
 
 def get_jitter(
-    xstd: float = 1,
-    ystd: float = 0.3,
+    rowstd: float = 1,
+    colstd: float = 0.3,
     thetastd: float = 0.0005,
     correlation_time=1 * u.second,
     nframes=200,
@@ -168,10 +168,10 @@ def get_jitter(
 
     Parameters:
     ----------
-    xstd: float
-        Standard deviation of jitter in pixels in x axis
-    ystd: float
-        Standard deviation of jitter in pixels in y axis
+    rowstd: float
+        Standard deviation of jitter in pixels in row/y axis
+    colstd: float
+        Standard deviation of jitter in pixels in col/x axis
     thetastd: float
         Standard deviation of jitter in degrees in y axis
     correlation_time: float
@@ -188,10 +188,10 @@ def get_jitter(
     --------
     time : np.ndarray
         Time array in seconds
-    x: np.ndarray
-        Jitter in the x axis in pixels
-    y: np.ndarray
-        Jitter in the y axis in pixels
+    row: np.ndarray
+        Jitter in the row/y axis in pixels
+    col: np.ndarray
+        Jitter in the column/x axis in pixels
     theta: np.ndarray
         Jitter in angle in degrees
     """
@@ -204,7 +204,7 @@ def get_jitter(
 
     jitter = []
     for idx, std, unit in zip(
-        [0, 1, 2], [xstd, ystd, thetastd], [u.pixel, u.pixel, u.deg]
+        [0, 1, 2], [rowstd, colstd, thetastd], [u.pixel, u.pixel, u.deg]
     ):
         if seed is not None:
             np.random.seed(seed + idx)

@@ -8,6 +8,10 @@ import astropy.units as u
 import numpy as np
 import pandas as pd
 
+import matplotlib.pyplot as plt
+from matplotlib.path import Path
+from matplotlib.patches import PathPatch
+
 from . import PACKAGEDIR
 from .irdetector import NIRDetector
 from .optics import Optics
@@ -16,8 +20,9 @@ from .utils import get_jitter, get_sky_catalog, get_simple_cosmic_ray_image
 from .visibledetector import VisibleDetector
 
 
-@dataclass
-class PandoraSat:
+
+#@dataclass
+class PandoraSat(object):
     """Holds information and methods for the full Pandora system.
 
     Args:
@@ -26,27 +31,31 @@ class PandoraSat:
         Optics (IRDetector): Class of the Optics properties
         Orbit (IRDetector): Class of the Orbit properties
     """
-
-    Orbit = Orbit()
-    Optics = Optics()
-    NIRDA = NIRDetector(
-        "NIR",
-        1.19 * u.arcsec / u.pixel,
-        18.0 * u.um / u.pixel,
-        2048 * u.pixel,
-        2048 * u.pixel,
-        #        0.5 * u.electron / u.DN,
-        True,
-    )
-    VISDA = VisibleDetector(
-        "Visible",
-        0.78 * u.arcsec / u.pixel,
-        6.5 * u.um / u.pixel,
-        2048 * u.pixel,
-        2048 * u.pixel,
-        #        0.5 * u.electron / u.DN,
-    )
-    targetlist = pd.read_csv(f"{PACKAGEDIR}/data/targets.csv")
+    def __init__(self,
+        ra: u.Quantity,
+        dec: u.Quantity,
+        theta: u.Quantity,):
+        self.ra, self.dec, self.theta = ra, dec, theta
+        self.Orbit = Orbit()
+        self.Optics = Optics()
+        self.NIRDA = NIRDetector(
+            "NIR",
+            ra, dec, theta,
+            1.19 * u.arcsec / u.pixel,
+            18.0 * u.um / u.pixel,
+            (2048, 512),
+            #        0.5 * u.electron / u.DN,
+            False,
+        )
+        self.VISDA = VisibleDetector(
+            "Visible",
+            ra, dec, theta,
+            0.78 * u.arcsec / u.pixel,
+            6.5 * u.um / u.pixel,
+            (2048, 1024),
+            #        0.5 * u.electron / u.DN,
+        )
+        self.targetlist = pd.read_csv(f"{PACKAGEDIR}/data/targets.csv")
 
     def __repr__(self):
         return "Pandora Sat"
@@ -101,12 +110,14 @@ class PandoraSat:
         ).T
         k = np.isfinite(ra) & np.isfinite(dec) & np.isfinite(mag)
         ra, dec, mag = ra[k], dec[k], mag[k]
-        vis_pix_coords = self.VISDA.wcs(
-            target_ra, target_dec, theta, distortion=distortion
-        ).all_world2pix(np.vstack([ra, dec]).T, 1)
-        nir_pix_coords = self.NIRDA.wcs(
-            target_ra, target_dec, theta, distortion=distortion
-        ).all_world2pix(np.vstack([ra, dec]).T, 1)
+        # vis_pix_coords = self.VISDA.wcs(
+        #     target_ra, target_dec, theta, distortion=distortion
+        # ).all_world2pix(np.vstack([ra, dec]).T, 1)
+        # nir_pix_coords = self.NIRDA.wcs(
+        #     target_ra, target_dec, theta, distortion=distortion
+        # ).all_world2pix(np.vstack([ra, dec]).T, 1)
+        vis_pix_coords = self.VISDA.world_to_pixel(ra, dec, distortion=distortion)
+        nir_pix_coords = self.NIRDA.world_to_pixel(ra, dec, distortion=distortion)
 
         # we're assuming that Gaia B mag is very close to the Pandora visible magnitude
         vis_counts = np.zeros_like(mag)
@@ -124,8 +135,8 @@ class PandoraSat:
                     ra,
                     dec,
                     mag,
-                    *vis_pix_coords.T,
-                    *nir_pix_coords.T,
+                    *vis_pix_coords,
+                    *nir_pix_coords,
                     vis_counts,
                     vis_flux,
                 ]
@@ -134,10 +145,10 @@ class PandoraSat:
                 "ra",
                 "dec",
                 "mag",
-                "vis_x",
-                "vis_y",
-                "nir_x",
-                "nir_y",
+                "vis_row",
+                "vis_column",
+                "nir_row",
+                "nir_column",
                 "vis_counts",
                 "vis_flux",
             ],
@@ -155,8 +166,8 @@ class PandoraSat:
         temperature=10 * u.deg_C,
         nreads=10,
         nt=40,
-        xjitter_1sigma=2 * u.pixel,
-        yjitter_1sigma=2 * u.pixel,
+        rowjitter_1sigma=2 * u.pixel,
+        coljitter_1sigma=2 * u.pixel,
         thetajitter_1sigma=0.0005 * u.deg,
         jitter_timescale=1 * u.second,
         include_noise=True,
@@ -174,9 +185,9 @@ class PandoraSat:
             prf_func = self.VISDA.get_fastPRF(wavelength, temperature)
 
         # Spacecraft jitter motion
-        time, xj, yj, thetaj = get_jitter(
-            xjitter_1sigma.value,
-            yjitter_1sigma.value,
+        time, rowj, colj, thetaj = get_jitter(
+            rowjitter_1sigma.value,
+            coljitter_1sigma.value,
             thetajitter_1sigma.value,
             correlation_time=jitter_timescale,
             nframes=nt * nreads,
@@ -186,58 +197,59 @@ class PandoraSat:
             np.zeros(
                 (
                     nt,
-                    self.VISDA.naxis1.value.astype(int),
-                    self.VISDA.naxis2.value.astype(int),
+                    *self.VISDA.shape,
                 ),
                 dtype=int,
             ),
             unit="electron",
             dtype="int",
         )
+        vis_y, vis_x = self.VISDA.world_to_pixel(source_catalog.ra, source_catalog.dec)
 
         for jdx in range(nt * nreads):
             # Update the positions via the new WCS in each frame
-            vis_x, vis_y = (
-                self.VISDA.wcs(
-                    target_ra + (xj[jdx] * self.VISDA.pixel_scale).to(u.deg),
-                    target_dec + (yj[jdx] * self.VISDA.pixel_scale).to(u.deg),
-                    theta + thetaj[jdx],
-                    distortion=distortion,
-                )
-                .all_world2pix(
-                    np.vstack([source_catalog.ra, source_catalog.dec]).T, 1
-                )
-                .T
-            )
+            # vis_x, vis_y = (
+            #     self.VISDA.wcs(
+            #         target_ra + (xj[jdx] * self.VISDA.pixel_scale).to(u.deg),
+            #         target_dec + (yj[jdx] * self.VISDA.pixel_scale).to(u.deg),
+            #         theta + thetaj[jdx],
+            #         distortion=distortion,
+            #     )
+            #     .all_world2pix(
+            #         np.vstack([source_catalog.ra, source_catalog.dec]).T, 1
+            #     )
+            #     .T
+            # )
 
             for idx, s in source_catalog.iterrows():
                 #            for idx in range(len(source_catalog)):
                 if (
                     (vis_x[idx] < 0)
-                    | (vis_x[idx] > 2048)
+                    | (vis_x[idx] > self.VISDA.shape[1])
                     | (vis_y[idx] < 0)
-                    | (vis_y[idx] > 2048)
+                    | (vis_y[idx] > self.VISDA.shape[0])
                 ):
                     continue
 
                 x, y = (
-                    xj[jdx].value + vis_x[idx] - self.VISDA.naxis1.value // 2,
-                    yj[jdx].value + vis_y[idx] - self.VISDA.naxis2.value // 2,
+                    colj[jdx].value + vis_x[idx] - self.VISDA.shape[1] // 2,
+                    rowj[jdx].value + vis_y[idx] - self.VISDA.shape[0] // 2,
                 )
 
-                x1, y1, f = prf_func(x, y)
-                X, Y = np.asarray(
+                y1, x1, f = prf_func(y, x)
+                Y, X = np.asarray(
                     np.meshgrid(
-                        x1 + self.VISDA.naxis1.value // 2,
-                        y1 + self.VISDA.naxis2.value // 2,
+                        y1 + self.VISDA.shape[0] // 2,
+                        x1 + self.VISDA.shape[1] // 2,
+                        indexing='ij'
                     )
                 ).astype(int)
                 #                print(X.mean(), Y.mean())
-                k = (X >= 0) & (X < 2048) & (Y >= 0) & (Y < 2048)
+                k = (X >= 0) & (X < self.VISDA.shape[1]) & (Y >= 0) & (Y < self.VISDA.shape[0])
                 science_image[jdx // nreads, Y[k], X[k]] += u.Quantity(
                     np.random.poisson(
                         self.VISDA.apply_gain(
-                            f.T[k]
+                            f[k]
                             * (
                                 (s.vis_counts * u.DN / u.second)
                                 * self.VISDA.integration_time.to(u.second)
@@ -254,7 +266,7 @@ class PandoraSat:
             cosmic_ray_expectation = (cosmic_ray_rate * ((self.VISDA.pixel_size * 2048 * u.pix)**2).to(u.cm**2) * self.VISDA.integration_time).value
 
             for jdx in range(nt):
-                science_image[jdx] += get_simple_cosmic_ray_image(cosmic_ray_expectation=cosmic_ray_expectation, gain_function=self.VISDA.apply_gain)
+                science_image[jdx] += get_simple_cosmic_ray_image(cosmic_ray_expectation=cosmic_ray_expectation, gain_function=self.VISDA.apply_gain, image_shape=self.VISDA.shape)
 
         # Apply the flat-field
         science_image = u.Quantity(
@@ -295,4 +307,17 @@ class PandoraSat:
                 science_image[jdx] += u.Quantity(
                     noise, unit="electron", dtype=int
                 )
-        return time, xj, yj, thetaj, science_image
+        return time, rowj, colj, thetaj, science_image
+
+    def footprint_plot(self, fig=None):
+        if fig is None:
+            fig, ax = plt.subplots()
+        ax.scatter(self.ra.value, self.dec.value, edgecolor='k', facecolor='None', zorder=10, label='Target')
+        ax.add_patch(PathPatch(Path(self.VISDA.wcs.calc_footprint(undistort=False)), color='C2', alpha=0.5, label='VISDA'))
+        ax.add_patch(PathPatch(Path(self.NIRDA.wcs.calc_footprint(undistort=False)), color='C3', alpha=0.5, label='NIRDA'))
+        ax.set_xlim(self.ra.value-1, self.ra.value+1)
+        ax.set_ylim(self.dec.value-1, self.dec.value+1)
+        ax.legend(frameon=True)
+        ax.set_aspect(1)
+        ax.set(xlabel='RA', ylabel='Dec', title=f'RA:{self.ra} Dec:{self.dec}, theta:{self.theta}')
+        return fig

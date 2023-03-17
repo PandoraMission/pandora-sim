@@ -1,13 +1,14 @@
 site_name: PandoraSat
 nav:
     - Home: README.md
+    - PandoraSat Conventions: conventions.ipynb
     - API:
       - PandoraSat: pandorasat.md
-      - NIRDA : irdetector.md
-      - VISDA : visibledetector.md
-      - PSF : psf.md
-      - Optics : optics.md
-      - Orbit : orbit.md
+      - NIRDA: irdetector.md
+      - VISDA: visibledetector.md
+      - PSF: psf.md
+      - Optics: optics.md
+      - Orbit: orbit.md
     - Notebooks:
       - PandoraSat Demo: pandorasat-demo-1.ipynb
 theme:
@@ -18,7 +19,7 @@ repo_url: https://github.com/pandoramission/pandora-sat
 plugins:
   - search
   - mkdocs-jupyter:
-      execute: True
+      execute: False
       include_source: True
       ignore_h1_titles: False
   - mkdocstrings:

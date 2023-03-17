@@ -34,7 +34,7 @@ def get_wcs(
     distortion_file: str
         Optional file path to a distortion CSV file. See `read_distortion_file`
     """
-    xreflect = True
+    xreflect = False
     yreflect = False
     hdu = fits.PrimaryHDU()
     hdu.header["CTYPE1"] = "RA---TAN"
