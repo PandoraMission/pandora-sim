@@ -56,7 +56,7 @@ class PandoraSat(object):
         self.targetlist = pd.read_csv(f"{PACKAGEDIR}/data/targets.csv")
 
     def __repr__(self):
-        return "Pandora Sat"
+        return f"Pandora Sat (RA: {np.round(self.ra, 3)}, Dec: {np.round(self.dec, 3)}, theta: {np.round(self.theta, 3)})"
 
     def get_sky_catalog(
         self,

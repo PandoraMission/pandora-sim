@@ -101,7 +101,7 @@ class PSF(object):
         else:
             l = np.arange(len(hdu) - 2)
 
-        psf_flux = hdu[1].data.transpose(np.hstack([1, 0, *l + 2]))[:, :-10]
+        psf_flux = hdu[1].data.transpose(np.hstack([1, 0, *l + 2]))
         dimension_names = [dimension_names[l1] for l1 in l]
         dimension_units = [u.Unit(hdu[l1].header["UNIT"]) for l1 in l + 2]
         X = [
