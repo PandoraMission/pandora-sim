@@ -3,6 +3,7 @@ nav:
     - Home: README.md
     - PandoraSat Conventions: conventions.ipynb
     - API:
+      - Target: target.md
       - PandoraSat: pandorasat.md
       - NIRDA: irdetector.md
       - VISDA: visibledetector.md
@@ -10,7 +11,8 @@ nav:
       - Optics: optics.md
       - Orbit: orbit.md
     - Notebooks:
-      - PandoraSat Demo: pandorasat-demo-1.ipynb
+      - WASP-69b Demo: WASP-69.ipynb
+      - GJ 3470b Demo: GJ3470.ipynb
 theme:
   name: "material"
   icon:

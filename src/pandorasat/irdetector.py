@@ -92,6 +92,16 @@ class NIRDetector(Detector):
     def non_linearity(self):
         raise ValueError("Not Set")
 
+    # @property
+    # def frame_time(self):
+    #     return (
+    #         15
+    #         * u.microsecond
+    #         / u.pixel
+    #         * np.product(self.subarray_size)
+    #         * u.pixel
+    #     ).to(u.second)
+
     def qe(self, wavelength):
         """
         Calculate the quantum efficiency of the detector from the JWST NIRCam models.
@@ -221,7 +231,7 @@ class NIRDetector(Detector):
                     self.psf.psf_column.value,
                     self.psf.psf([wavs[ndx], temperature]),
                 )
-                ax[idx, jdx].set(xticklabels=[], yticklabels=[])
+            #                ax[idx, jdx].set(xticklabels=[], yticklabels=[])
             elif image_type.lower() == "prf":
                 y, x, f = self.psf.prf(
                     [wavs[ndx], temperature], location=[0, 0]
@@ -335,7 +345,7 @@ class NIRDetector(Detector):
             ar[Y[k], X[k]] += np.nan_to_num(prf[k] * integral.value)
         ar = self.apply_gain(ar * u.DN)
         ar *= 1 / u.second
-        return ar
+        return wav_edges[np.isfinite(wav_edges).all(axis=1)].value, ar
 
     def get_frames(
         self,
@@ -645,7 +655,6 @@ class NIRDetector(Detector):
                 3D flux of the PRF on the detector. Sum down first axis to create a summed trace.
             """
             return (
-                wav_edges,
                 ys + (rowloc - (rowloc % 1)),
                 xs + (colloc - (colloc % 1)),
                 grid[
@@ -657,7 +666,7 @@ class NIRDetector(Detector):
                 ],
             )
 
-        return fasttrace
+        return wav_edges, fasttrace
 
     def get_integrated_spectrum(self, wav, spec, wav_edges, plot=False):
         """Given an input spectrum will get the integrated spectrum
@@ -695,3 +704,21 @@ class NIRDetector(Detector):
             )
         integral = integral * unit_convert
         return integral
+
+    # def get_sky_catalog(self, jmagnitude_range=(-3, 18)):
+    #     cat = get_sky_catalog(
+    #         self.ra,
+    #         self.dec,
+    #         columns="ra, dec, Teff, logg, jmag",
+    #         jmagnitude_range=jmagnitude_range,
+    #     )
+    #     cat[["nir_row", "nir_column"]] = self.world_to_pixel(cat.ra, cat.dec).T
+    #     r1 = cat.nir_row - self.subarray_corner[0]
+    #     c1 = cat.nir_column - self.subarray_corner[1]
+    #     k = (
+    #         (r1 > -self.trace_range[1])
+    #         & (r1 < (self.subarray_size[0] - self.trace_range[0]))
+    #         & (c1 > -5)
+    #         & (c1 < (self.subarray_size[1] + 5))
+    #     )
+    #     return cat[k].reset_index(drop=True)

@@ -1,98 +1,285 @@
 # Standard library
-import json
-import sys
-from urllib.parse import quote as urlencode
+import os
+import warnings
+from functools import lru_cache
 
 # Third-party
 import astropy.units as u
 import numpy as np
-import pandas as pd
-import requests
 from astropy.constants import c, h
 from astropy.convolution import Gaussian1DKernel, convolve
+from astropy.coordinates import Distance, SkyCoord
 from astropy.io import fits
 from astropy.time import Time
+from astroquery import log as asqlog
+from astroquery.gaia import Gaia
+from astroquery.ipac.nexsci.nasa_exoplanet_archive import NasaExoplanetArchive
 
 from . import PACKAGEDIR, __version__
 
+phoenixpath = f"{PACKAGEDIR}/data/phoenix"
+os.environ["PYSYN_CDBS"] = phoenixpath
 
-def mast_query(request):
-    """Perform a MAST query.
 
-    Parameters
-    ----------
-    request (dictionary): The MAST request json object
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", message="Extinction files not found in ")
+    # Third-party
+    import pysynphot
 
-    Returns head,content where head is the response HTTP headers, and content is the returned data"""
 
-    # Base API url
-    request_url = "https://mast.stsci.edu/api/v0/invoke"
+asqlog.setLevel("ERROR")
+# Third-party
 
-    # Grab Python Version
-    version = ".".join(map(str, sys.version_info[:3]))
 
-    # Create Http Header Variables
-    headers = {
-        "Content-type": "application/x-www-form-urlencoded",
-        "Accept": "text/plain",
-        "User-agent": "python-requests/" + version,
-    }
-
-    # Encoding the request as a json string
-    req_string = json.dumps(request)
-    req_string = urlencode(req_string)
-
-    # Perform the HTTP request
-    resp = requests.post(
-        request_url, data="request=" + req_string, headers=headers
+def get_phoenix_model(teff, logg, jmag):
+    logg1 = logg.value if isinstance(logg, u.Quantity) else logg
+    star = pysynphot.Icat(
+        "phoenix",
+        teff.value if isinstance(teff, u.Quantity) else teff,
+        0,
+        logg1 if np.isfinite(logg1) else 5,
     )
+    star_norm = star.renorm(
+        jmag, "vegamag", pysynphot.ObsBandpass("johnson,j")
+    )
+    star_norm.convert("Micron")
+    star_norm.convert("flam")
 
-    # Pull out the headers and response content
-    head = resp.headers
-    content = resp.content.decode("utf-8")
+    mask = (star_norm.wave >= 0.1) * (star_norm.wave <= 3)
+    wavelength = star_norm.wave[mask] * u.micron
+    wavelength = wavelength.to(u.angstrom)
 
-    return head, content
+    sed = star_norm.flux[mask] * u.erg / u.s / u.cm**2 / u.angstrom
+    return wavelength, sed
 
 
+def get_planets(
+    coord: SkyCoord, radius: u.Quantity = 20 * u.arcsecond
+) -> dict:
+    """Largish default radius for high proper motion targets this breaks
+    Returns a dictionary of dictionaries with planet parameters.
+    """
+    try:
+        coord2000 = coord.apply_space_motion(Time(2016, format="jyear"))
+    except ValueError:
+        coord2000 = coord
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        planets_tab = NasaExoplanetArchive.query_region(
+            table="pscomppars", coordinates=coord2000, radius=radius
+        )
+        if len(planets_tab) != 0:
+            attrs = ["pl_orbper", "pl_tranmid", "pl_trandur", "pl_trandep"]
+            planets = {
+                letter: {
+                    attr: planets_tab[planets_tab["pl_letter"] == letter][
+                        attr
+                    ][0].unmasked
+                    for attr in attrs
+                }
+                for letter in planets_tab["pl_letter"]
+            }
+            # There's an error in the NASA exoplanet archive units that makes duration "days" instead of "hours"
+            for planet in planets:
+                planets[planet]["pl_trandur"] = (
+                    planets[planet]["pl_trandur"].value * u.hour
+                )
+        else:
+            planets = {}
+    return planets
+
+
+# def mast_query(request):
+#     """Perform a MAST query.
+
+#     Parameters
+#     ----------
+#     request (dictionary): The MAST request json object
+
+#     Returns head,content where head is the response HTTP headers, and content is the returned data"""
+
+#     # Base API url
+#     request_url = "https://mast.stsci.edu/api/v0/invoke"
+
+#     # Grab Python Version
+#     version = ".".join(map(str, sys.version_info[:3]))
+
+#     # Create Http Header Variables
+#     headers = {
+#         "Content-type": "application/x-www-form-urlencoded",
+#         "Accept": "text/plain",
+#         "User-agent": "python-requests/" + version,
+#     }
+
+#     # Encoding the request as a json string
+#     req_string = json.dumps(request)
+#     req_string = urlencode(req_string)
+
+#     # Perform the HTTP request
+#     resp = requests.post(
+#         request_url, data="request=" + req_string, headers=headers
+#     )
+
+#     # Pull out the headers and response content
+#     head = resp.headers
+#     content = resp.content.decode("utf-8")
+
+#     return head, content
+
+
+# def get_sky_catalog(
+#     ra=210.8023,
+#     dec=54.349,
+#     radius=0.155,
+#     tessmagnitude_range=(-3, 16),
+#     jmagnitude_range=(-3, 20),
+#     columns="ra, dec, gaiabp",
+# ):
+#     """We use this instead of astroquery so we can query based on magnitude filters, and reduce the columns
+
+#     See documentation at:
+#     https://mast.stsci.edu/api/v0/_services.html
+#     https://mast.stsci.edu/api/v0/pyex.html#MastCatalogsFilteredTicPy
+#     https://mast.stsci.edu/api/v0/_t_i_cfields.html
+#     """
+#     request = {
+#         "service": "Mast.Catalogs.Filtered.Tic.Position.Rows",
+#         "format": "json",
+#         "params": {
+#             "columns": columns,
+#             "filters": [
+#                 {
+#                     "paramName": "gaiabp",
+#                     "values": [
+#                         {
+#                             "min": tessmagnitude_range[0],
+#                             "max": tessmagnitude_range[1],
+#                         }
+#                     ],
+#                     "paramName": "jmag",
+#                     "values": [
+#                         {
+#                             "min": jmagnitude_range[0],
+#                             "max": jmagnitude_range[1],
+#                         }
+#                     ],
+#                 }
+#             ],
+#             "ra": ra.to(u.deg).value if isinstance(ra, u.Quantity) else ra,
+#             "dec": dec.to(u.deg).value if isinstance(dec, u.Quantity) else dec,
+#             "radius": radius.to(u.deg).value if isinstance(radius, u.Quantity) else radius,
+#         },
+#     }
+
+#     headers, out_string = mast_query(request)
+#     out_data = json.loads(out_string)
+#     df = pd.DataFrame.from_dict(out_data["data"])
+#     if len(df) > 0:
+#         s = np.argsort(
+#             np.hypot(
+#                 np.asarray(df.ra) - [ra.to(u.deg).value
+#                 if isinstance(ra, u.Quantity)
+#                 else ra],
+#                 np.asarray(df.dec) - [dec.to(u.deg).value
+#                 if isinstance(dec, u.Quantity)
+#                 else dec],
+#             )
+#         )
+#         df = df.loc[s].reset_index(drop=True)
+#     else:
+#         df = pd.DataFrame(columns=columns.split(", "))
+#     return df
+
+
+@lru_cache
 def get_sky_catalog(
     ra=210.8023,
     dec=54.349,
     radius=0.155,
-    magnitude_range=(-3, 16),
-    columns="ra, dec, gaiabp",
+    gbpmagnitude_range=(-3, 20),
+    limit=None,
+    gaia_keys=[
+        "source_id",
+        "ra",
+        "dec",
+        "parallax",
+        "pmra",
+        "pmdec",
+        "radial_velocity",
+        "ruwe",
+        "phot_bp_mean_mag",
+        "teff_gspphot",
+        "logg_gspphot",
+    ],
 ):
-    """We use this instead of astroquery so we can query based on magnitude filters, and reduce the columns
+    """Gets a catalog of coordinates on the sky based on an input ra, dec and radius"""
 
-    See documentation at:
-    https://mast.stsci.edu/api/v0/_services.html
-    https://mast.stsci.edu/api/v0/pyex.html#MastCatalogsFilteredTicPy
-    https://mast.stsci.edu/api/v0/_t_i_cfields.html
+    query_str = f"""
+    SELECT {f'TOP {limit} ' if limit is not None else ''}* FROM (
+        SELECT gaia.{', gaia.'.join(gaia_keys)}, dr2.teff_val AS dr2_teff_val,
+        dr2.rv_template_logg AS dr2_logg, tmass.j_m, tmass.j_msigcom, tmass.ph_qual, DISTANCE(
+        POINT({u.Quantity(ra, u.deg).value}, {u.Quantity(dec, u.deg).value}),
+        POINT(gaia.ra, gaia.dec)) AS ang_sep,
+        EPOCH_PROP_POS(gaia.ra, gaia.dec, gaia.parallax, gaia.pmra, gaia.pmdec,
+        gaia.radial_velocity, gaia.ref_epoch, 2000) AS propagated_position_vector
+        FROM gaiadr3.gaia_source AS gaia
+        JOIN gaiadr3.tmass_psc_xsc_best_neighbour AS xmatch USING (source_id)
+        JOIN gaiadr3.dr2_neighbourhood AS xmatch2 ON gaia.source_id = xmatch2.dr3_source_id
+        JOIN gaiadr2.gaia_source AS dr2 ON xmatch2.dr2_source_id = dr2.source_id
+        JOIN gaiadr3.tmass_psc_xsc_join AS xjoin USING (clean_tmass_psc_xsc_oid)
+        JOIN gaiadr1.tmass_original_valid AS tmass ON
+        xjoin.original_psc_source_id = tmass.designation
+        WHERE 1 = CONTAINS(
+        POINT({u.Quantity(ra, u.deg).value}, {u.Quantity(dec, u.deg).value}),
+        CIRCLE(gaia.ra, gaia.dec, {(u.Quantity(radius, u.deg) + 50*u.arcsecond).value}))
+        AND gaia.parallax IS NOT NULL
+        AND gaia.phot_bp_mean_mag > {gbpmagnitude_range[0]}
+        AND gaia.phot_bp_mean_mag < {gbpmagnitude_range[1]}) AS subquery
+    WHERE 1 = CONTAINS(
+    POINT({u.Quantity(ra, u.deg).value}, {u.Quantity(dec, u.deg).value}),
+    CIRCLE(COORD1(subquery.propagated_position_vector), COORD2(subquery.propagated_position_vector), {u.Quantity(radius, u.deg).value}))
+    ORDER BY ang_sep ASC
     """
-    request = {
-        "service": "Mast.Catalogs.Filtered.Tic.Position.Rows",
-        "format": "json",
-        "params": {
-            "columns": columns,
-            "filters": [
-                {
-                    "paramName": "gaiabp",
-                    "values": [
-                        {"min": magnitude_range[0], "max": magnitude_range[1]}
-                    ],
-                }
-            ],
-            "ra": ra,
-            "dec": dec,
-            "radius": radius,
-        },
+    job = Gaia.launch_job_async(query_str, verbose=False)
+    tbl = job.get_results()
+    if len(tbl) == 0:
+        raise ValueError("Could not find matches.")
+    plx = tbl["parallax"].value.filled(fill_value=0)
+    plx[plx < 0] = 0
+    cat = {
+        "jmag": tbl["j_m"].data.filled(np.nan),
+        "bmag": tbl["phot_bp_mean_mag"].data.filled(np.nan),
+        "ang_sep": tbl["ang_sep"].data.filled(np.nan) * u.deg,
     }
-
-    headers, out_string = mast_query(request)
-    out_data = json.loads(out_string)
-
-    df = pd.DataFrame.from_dict(out_data["data"])
-    s = np.argsort(np.hypot(np.asarray(df.ra) - ra, np.asarray(df.dec) - dec))
-    return df.loc[s].reset_index(drop=True)
+    cat["teff"] = (
+        tbl["teff_gspphot"].data.filled(
+            tbl["dr2_teff_val"].data.filled(np.nan)
+        )
+        * u.K
+    )
+    cat["logg"] = tbl["logg_gspphot"].data.filled(
+        tbl["dr2_logg"].data.filled(np.nan)
+    )
+    cat["RUWE"] = tbl["ruwe"].data.filled(99)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        cat["coords"] = SkyCoord(
+            ra=tbl["ra"].value.data * u.deg,
+            dec=tbl["dec"].value.data * u.deg,
+            pm_ra_cosdec=tbl["pmra"].value.filled(fill_value=0)
+            * u.mas
+            / u.year,
+            pm_dec=tbl["pmdec"].value.filled(fill_value=0) * u.mas / u.year,
+            obstime=Time.strptime("2016", "%Y"),
+            distance=Distance(parallax=plx * u.mas, allow_negative=True),
+            radial_velocity=tbl["radial_velocity"].value.filled(fill_value=0)
+            * u.km
+            / u.s,
+        ).apply_space_motion(Time.now())
+    cat["source_id"] = np.asarray(
+        [f"Gaia DR3 {i}" for i in tbl["source_id"].value.data]
+    )
+    return cat
 
 
 def photon_energy(wavelength):

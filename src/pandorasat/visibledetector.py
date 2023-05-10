@@ -8,11 +8,14 @@ import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from astropy.convolution import Gaussian2DKernel, convolve
 from astropy.io import fits, votable
+from tqdm import tqdm
 
-from . import PACKAGEDIR
+from . import PACKAGEDIR, PANDORASTYLE
 from .detector import Detector
 from .psf import PSF, interpfunc
+from .utils import get_simple_cosmic_ray_image
 from .wcs import get_wcs
 
 
@@ -56,6 +59,37 @@ class VisibleDetector(Detector):
             )
             r = (self.fieldstop_radius / self.pixel_scale).to(u.pix).value
             self.fieldstop = ~((np.abs(C) >= r) | (np.abs(R) >= r))
+
+        # Blur our the PSF
+        # We assume that there's low level jitter that "blurs" the PSF to some extent.
+        s = self.psf.psf_flux.shape
+        self.psf.psf_flux = np.asarray(
+            [
+                [
+                    [
+                        [
+                            convolve(
+                                self.psf.psf_flux[:, :, idx, jdx, kdx, ldx],
+                                Gaussian2DKernel(1),
+                            )
+                            for idx in range(s[2])
+                        ]
+                        for jdx in range(s[3])
+                    ]
+                    for kdx in range(s[4])
+                ]
+                for ldx in range(s[5])
+            ]
+        ).transpose([4, 5, 3, 2, 1, 0])
+
+        # ROW COLUMN JUST LIKE PYTHON
+        self.subarray_size = (50, 51)
+        # COLUMN, ROW
+        self.subarray_row, self.subarray_column = np.meshgrid(
+            +np.arange(self.subarray_size[0]),
+            +np.arange(self.subarray_size[1]),
+            indexing="ij",
+        )
 
     @property
     def _dispersion_df(self):
@@ -134,18 +168,16 @@ class VisibleDetector(Detector):
                     self.psf.psf(point),
                 )
                 ax[idx, jdx].set(xticklabels=[], yticklabels=[])
-            elif image_type.lower() == "prf":
-                y, x, f = self.psf.prf(point)
-                if idx < (n - 1):
-                    ax[idx, jdx].set(xticklabels=[])
-                if jdx >= 1:
-                    ax[idx, jdx].set(yticklabels=[])
-            #             if jdx >= 1:
-            #                 ax[idx, jdx].set(yticklabels=[])
+            # elif image_type.lower() == "prf":
+            #     y, x, f = self.psf.prf(point)
+            #     if idx < (n - 1):
+            #         ax[idx, jdx].set(xticklabels=[])
+            #     if jdx >= 1:
+            #         ax[idx, jdx].set(yticklabels=[])
+            # #             if jdx >= 1:
+            # #                 ax[idx, jdx].set(yticklabels=[])
             else:
-                raise ValueError(
-                    "No such image type. Choose from `'PSF'`, or `'PRF'.`"
-                )
+                raise ValueError("No such image type. Choose from `'PSF'`.")
             ax[idx, jdx].pcolormesh(
                 x,
                 y,
@@ -260,6 +292,10 @@ class VisibleDetector(Detector):
 
         grid = grid.transpose([4, 5, 2, 3, 0, 1])
 
+        grid /= np.trapz(np.trapz(grid, ys, axis=0), axis=0)[
+            None, None, :, :, :, :
+        ]
+
         # Function to get PRF at any given location
         # Will interpolate across the detector, but will return the closest match in subpixel space
 
@@ -305,18 +341,26 @@ class VisibleDetector(Detector):
 
         return fastPRF
 
-    def get_background_light_estimate(self, ra, dec):
+    def get_background_light_estimate(self, ra, dec, shape=None):
         """Placeholder, will estimate the background light at different locations?
         Background in one integration...!
         """
+        # bkg = u.Quantity(
+        #     np.zeros(shape, int), unit="electron", dtype="int"
+        # )
+        # bkg[self.fieldstop] = u.Quantity(
+        #     np.random.poisson(lam=2, size=self.fieldstop.sum()).astype(int),
+        #     unit="electron",
+        #     dtype="int",
+        # )
+        if shape is None:
+            shape = self.shape
         bkg = u.Quantity(
-            np.zeros(self.shape, int), unit="electron", dtype="int"
-        )
-        bkg[self.fieldstop] = u.Quantity(
-            np.random.poisson(lam=2, size=self.fieldstop.sum()).astype(int),
+            np.random.poisson(lam=1, size=shape).astype(int),
             unit="electron",
             dtype="int",
         )
+
         return bkg
 
     def apply_gain(self, values: u.Quantity):
@@ -331,4 +375,337 @@ class VisibleDetector(Detector):
             ]
         )
         gain = np.asarray([0.52, 0.6, 0.61, 0.67]) * u.electron / u.DN
-        return (masks * x[None, :] * gain[:, None]).sum(axis=0)
+        if values.ndim == 1:
+            gain = gain[:, None]
+        if values.ndim == 2:
+            gain = gain[:, None, None]
+        return u.Quantity(
+            (masks * x[None, :] * gain).sum(axis=0), dtype=int, unit=u.electron
+        )
+
+    def prf(
+        self,
+        row=1024,
+        col=1024,
+        wavelength=None,
+        temperature=None,
+        shape=None,
+        corner=(1004, 1004),
+        freeze_dimensions=[2, 3],
+        return_locs=False,
+    ):
+        if shape is None:
+            shape = self.subarray_size
+
+        # If outside the interp edges just return the edge
+        point = (
+            row - self.shape[0] // 2,
+            col - self.shape[1] // 2,
+            wavelength,
+            temperature,
+        )
+        dr, dc = 0, 0
+        if point[0] > self.psf.row1d[-1].value:
+            dr = point[0] - self.psf.row1d[-1].value + 1
+        if point[0] < self.psf.row1d[0].value:
+            dr = point[0] - self.psf.row1d[0].value - 1
+        if point[1] > self.psf.column1d[-1].value:
+            dc = point[1] - self.psf.column1d[-1].value + 1
+        if point[1] < self.psf.column1d[0].value:
+            dc = point[1] - self.psf.column1d[0].value - 1
+        point = (point[0] - dr, point[1] - dc, point[2], point[3])
+
+        r1, c1 = self.psf.psf_row.value + row, self.psf.psf_column.value + col
+        r = np.arange(0, shape[0]) + corner[0]
+        c = np.arange(0, shape[1]) + corner[1]
+        if (
+            (row < (r[0] - 20))
+            | (row > (r[-1] + 20))
+            | (col < (c[0] - 20))
+            | (col > (c[-1] + 20))
+        ):
+            return r, c, np.zeros(shape)
+
+        f = self.psf.psf(point, freeze_dimensions=freeze_dimensions)
+        s1 = np.asarray(
+            [np.interp(r, r1, f[:, idx]) for idx in range(f.shape[1])]
+        )
+        s2 = np.asarray(
+            [np.interp(c, c1, s1[:, idx]) for idx in range(s1.shape[1])]
+        )
+        s2 /= s2.sum()
+        if return_locs:
+            return r, c, s2
+        return s2
+
+    def get_FFIs(
+        self,
+        catalog,
+        nframes: int,
+        nreads: int,
+        include_noise=True,
+        include_cosmics=True,
+        wavelength=None,
+        temperature=None,
+        freeze_dimensions=[2, 3],
+        jitter=None,
+        quiet=True,
+    ):
+        """Get Full Frame Images"""
+        shape = self.shape
+        catalog = catalog[
+            (catalog.vis_column > 0)
+            | (catalog.vis_column < shape[1])
+            | (catalog.vis_row > 0)
+            | (catalog.vis_row < shape[0])
+        ].reset_index(drop=True)
+
+        time = np.linspace(
+            0,
+            self.integration_time.value * nreads * nframes,
+            nreads * nframes + 1,
+        )[:-1]
+
+        if jitter is not None:
+            rowj, colj, thetaj = (  # noqa
+                np.interp(time, jitter.time - jitter.time[0], jitter.rowj),
+                np.interp(time, jitter.time - jitter.time[0], jitter.colj),
+                np.interp(time, jitter.time - jitter.time[0], jitter.thetaj),
+            )
+
+        science_image = np.zeros(
+            (
+                nframes,
+                *shape,
+            ),
+            dtype=float,
+        )
+
+        for idx, s in tqdm(
+            catalog.iterrows(),
+            total=catalog.shape[0],
+            desc="Target",
+            leave=True,
+            position=0,
+            disable=quiet,
+        ):
+            for tdx in range(nreads * nframes):
+                if jitter is not None:
+                    x, y = (
+                        colj[tdx] + s.vis_column,  # - self.shape[1] // 2,
+                        rowj[tdx] + s.vis_row,  # - self.shape[0] // 2,
+                    )
+                    y1, x1, prf = self.prf(
+                        row=y,
+                        col=x,
+                        wavelength=wavelength,
+                        temperature=temperature,
+                        freeze_dimensions=freeze_dimensions,
+                        corner=(y - 30, x - 30),
+                        shape=(60, 61),
+                        return_locs=True,
+                    )
+                else:
+                    if tdx == 0:
+                        x, y = (s.vis_column, s.vis_row)
+                        y1, x1, prf = self.prf(
+                            row=y,
+                            col=x,
+                            wavelength=wavelength,
+                            temperature=temperature,
+                            freeze_dimensions=freeze_dimensions,
+                            corner=(y - 30, x - 30),
+                            shape=(60, 61),
+                            return_locs=True,
+                        )
+
+                Y, X = np.asarray(
+                    np.meshgrid(
+                        y1,
+                        x1,
+                        indexing="ij",
+                    )
+                ).astype(int)
+                k = (
+                    (X >= 0)
+                    & (X < self.shape[1])
+                    & (Y >= 0)
+                    & (Y < self.shape[0])
+                )
+                science_image[tdx // nreads, Y[k], X[k]] += self.apply_gain(
+                    u.Quantity(
+                        np.random.poisson(
+                            prf[k]
+                            * s.vis_counts
+                            * self.integration_time.to(u.second).value
+                        ),
+                        dtype=int,
+                        unit=u.DN,
+                    )
+                ).value
+
+        if include_noise:
+            # # background light?
+            for tdx in range(science_image.shape[0]):
+                science_image[tdx] += self.get_background_light_estimate(
+                    catalog.loc[0, "ra"], catalog.loc[0, "dec"], shape
+                ).value.astype(int)
+                science_image[tdx] += np.random.normal(
+                    loc=self.bias.value,
+                    scale=self.read_noise.value,
+                    size=shape,
+                ).astype(int)
+                science_image[tdx] += np.random.poisson(
+                    lam=(self.dark * self.integration_time).value,
+                    size=shape,
+                ).astype(int)
+
+        if include_cosmics:
+            # This is the worst rate we expect, from the SAA
+            cosmic_ray_rate = 1000 / (u.second * u.cm**2)
+            cosmic_ray_expectation = (
+                cosmic_ray_rate
+                * ((self.pixel_size * 2048 * u.pix) ** 2).to(u.cm**2)
+                * self.integration_time
+            ).value
+
+            for tdx in range(science_image.shape[0]):
+                science_image[tdx] += get_simple_cosmic_ray_image(
+                    cosmic_ray_expectation=cosmic_ray_expectation,
+                    gain_function=self.apply_gain,
+                    image_shape=self.shape,
+                ).value
+
+        time = np.asarray([time[idx::nreads] for idx in range(nreads)]).mean(
+            axis=0
+        )
+        return time, science_image
+
+    def get_subarray(
+        self,
+        cat,
+        corner,
+        nreads=50,
+        nframes=10,
+        quiet=False,
+        time_series_generators=None,
+    ):
+        f = np.zeros((nframes, *self.subarray_size), dtype=int)
+        time = self.time[: nreads * nframes]
+        time = np.asarray([time[idx::nreads] for idx in range(nreads)]).mean(
+            axis=0
+        )
+        for idx, m in cat.iterrows():
+            if time_series_generators is None:
+                tsgenerator = lambda x: 1  # noqa
+            else:
+                tsgenerator = time_series_generators[idx]
+            if tsgenerator is None:
+                tsgenerator = lambda x: 1  # noqa
+
+            prf = self.prf(row=m.vis_row, col=m.vis_column, corner=corner)
+            for tdx in tqdm(
+                range(nframes),
+                desc="Times",
+                position=0,
+                leave=True,
+                disable=quiet,
+            ):
+                f[tdx] += self.apply_gain(
+                    u.Quantity(
+                        np.random.poisson(
+                            prf
+                            * tsgenerator(time[tdx])
+                            * m.vis_counts
+                            * nreads
+                            * self.integration_time.to(u.second).value
+                        ),
+                        dtype=int,
+                        unit=u.DN,
+                    )
+                ).value
+        for tdx in range(nframes):
+            f[tdx] += (
+                self.get_background_light_estimate(
+                    cat.loc[0, "ra"], cat.loc[0, "dec"], self.subarray_size
+                )
+                * nreads
+            ).value.astype(int)
+            f[tdx] += np.random.normal(
+                loc=self.bias.value,
+                scale=self.read_noise.value,
+                size=self.subarray_size,
+            ).astype(int)
+
+            f[tdx] += np.random.poisson(
+                lam=(self.dark * self.integration_time * nreads).value,
+                size=self.subarray_size,
+            ).astype(int)
+
+        apers = np.asarray(
+            [
+                self.get_aper(row=m.vis_row, col=m.vis_column, corner=corner)
+                for idx, m in cat.iterrows()
+            ]
+        )
+        return time, f, apers
+
+    def plot_TPFs(self, nreads=50, **kwargs):
+        nreads = 50
+        with plt.style.context(PANDORASTYLE):
+            fig, ax = plt.subplots(
+                1, len(self.Catalogs), figsize=(len(self.Catalogs) * 2, 2)
+            )
+            vmin = kwargs.pop("vmin", self.bias.value)
+            vmax = kwargs.pop("vmax", self.bias.value + 10 * nreads)
+            cmap = kwargs.pop("cmap", "viridis")
+
+            for idx in range(len(self.Catalogs)):
+                _, f, _ = self.get_subarray(
+                    self.Catalogs[idx],
+                    self.corners[idx],
+                    nreads=nreads,
+                    nframes=1,
+                    quiet=True,
+                )
+                _ = ax[idx].imshow(
+                    f[0],
+                    origin="lower",
+                    cmap=cmap,
+                    vmin=vmin,
+                    vmax=vmax,
+                    **kwargs,
+                )
+                ax[idx].set_title(f"BKG star {idx}")
+                ax[idx].set(xticks=[], yticks=[])
+            ax[0].set_title("Target")
+
+        return fig
+
+    def get_aper(self, row=0, col=0, corner=(0, 0), shape=None):
+        if shape is None:
+            shape = self.subarray_size
+        aper = np.zeros(shape)
+        for idx in np.arange(0, 1, 0.1):
+            for jdx in np.arange(0, 1, 0.1):
+                aper += self.prf(
+                    row=row + idx, col=col + jdx, corner=corner, shape=shape
+                )
+        aper /= 100
+        return aper > 0.005
+
+    def get_target_timeseries(self, ts_func=None, nreads=50, subarray=0):
+        cat = self.Catalogs[subarray]
+        corner = self.corners[subarray]
+        time_series_generators = np.hstack(
+            [ts_func, [None for idx in range(len(cat) - 1)]]
+        )
+        time, f, apers = self.get_subarray(
+            cat,
+            corner,
+            nreads=nreads,
+            nframes=len(self.time) // nreads,
+            time_series_generators=time_series_generators,
+            quiet=True,
+        )
+        return time, f[:, apers[0]].sum(axis=1)

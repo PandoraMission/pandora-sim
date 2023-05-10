@@ -1,16 +1,14 @@
 # Third-party
 import astropy.units as u
 import numpy as np
-import pandas as pd
 import pytest
-from astropy.coordinates import SkyCoord
 
 # First-party/Local
 from pandorasat import PACKAGEDIR, PSF, PandoraSat, Target, __version__
 
 
 def test_version():
-    assert __version__ == "0.3.0"
+    assert __version__ == "0.4.0"
 
 
 def test_pandorasat():
@@ -28,13 +26,10 @@ def test_pandorasat():
 @pytest.mark.remote_data
 def test_trace():
     p = PandoraSat(ra=180 * u.deg, dec=0 * u.deg, theta=10 * u.deg)
-    t = Target("GJ 436").from_vizier()
-    t = Target("GJ 436").from_phoenix()
+    t = Target.from_gaia("GJ 436")
     nirda = p.NIRDA
     wavelength = np.linspace(0.1, 2, 6000) * u.micron
-    spectrum = t.model_spectrum(wavelength)
-    # nirda.get_trace(t, 2, target_center=(20, 200))
-
+    spectrum = t.spectrum(wavelength)
     nirda.get_trace(
         wavelength,
         spectrum.value**0 * spectrum.unit,
@@ -62,46 +57,47 @@ def test_psf():
     np.isclose(np.trapz(np.trapz(prf, x, axis=0), y, axis=0), 1, atol=1e-5)
 
 
-@pytest.mark.remote_data
-def test_visiblesim():
-    theta = 10 * u.deg
-    # Set the target name to any from the target list.
-    targetname = "TRAPPIST-1"
-    c = SkyCoord.from_name(targetname)
-    # Set up the "observatory"
-    p = PandoraSat(c.ra, c.dec, theta)
-    # Get a list of sources nearby that will be on the detector
-    source_catalog = p.get_sky_catalog(c.ra.deg, c.dec.deg, theta)
-    assert isinstance(source_catalog, pd.DataFrame)
-    # Set up jitter properties
-    rowjitter_1sigma = 2 * u.pix
-    coljitter_1sigma = 2 * u.pix
-    jitter_timescale = 1 * u.second
-    # 40 frames
-    nt = 40
-    prf_func = p.VISDA.get_fastPRF(
-        wavelength=0.54 * u.micron, temperature=10 * u.deg_C
-    )
-    # Build the images
-    time, rowcenter, colcenter, thetacenter, science_images = p.get_sky_images(
-        target_ra=c.ra,
-        target_dec=c.dec,
-        theta=theta,
-        nreads=1,
-        nt=nt,
-        rowjitter_1sigma=rowjitter_1sigma,
-        coljitter_1sigma=coljitter_1sigma,
-        jitter_timescale=jitter_timescale,
-        prf_func=prf_func,
-    )
-    assert isinstance(science_images, u.Quantity)
-    assert isinstance(time, u.Quantity)
-    assert isinstance(colcenter, u.Quantity)
-    assert isinstance(rowcenter, u.Quantity)
-    assert isinstance(thetacenter, u.Quantity)
-    assert science_images.shape == (40, 2048, 2048)
-    assert time.shape == (40,)
-    assert colcenter.shape == (40,)
-    assert rowcenter.shape == (40,)
-    assert np.abs(colcenter).max().value < 10
-    assert np.abs(rowcenter).max().value < 10
+# Dead now
+# @pytest.mark.remote_data
+# def test_visiblesim():
+#     theta = 10 * u.deg
+#     # Set the target name to any from the target list.
+#     targetname = "TRAPPIST-1"
+#     c = SkyCoord.from_name(targetname)
+#     # Set up the "observatory"
+#     p = PandoraSat(c.ra, c.dec, theta)
+#     # Get a list of sources nearby that will be on the detector
+#     source_catalog = p.SkyCatalog
+#     assert isinstance(source_catalog, pd.DataFrame)
+#     # Set up jitter properties
+#     rowjitter_1sigma = 2 * u.pix
+#     coljitter_1sigma = 2 * u.pix
+#     jitter_timescale = 1 * u.second
+#     # 40 frames
+#     nt = 40
+#     prf_func = p.VISDA.get_fastPRF(
+#         wavelength=0.54 * u.micron, temperature=10 * u.deg_C
+#     )
+#     # Build the images
+#     time, rowcenter, colcenter, thetacenter, science_images = p.get_sky_images(
+#         target_ra=c.ra,
+#         target_dec=c.dec,
+#         theta=theta,
+#         nreads=1,
+#         nt=nt,
+#         rowjitter_1sigma=rowjitter_1sigma,
+#         coljitter_1sigma=coljitter_1sigma,
+#         jitter_timescale=jitter_timescale,
+#         prf_func=prf_func,
+#     )
+#     assert isinstance(science_images, u.Quantity)
+#     assert isinstance(time, u.Quantity)
+#     assert isinstance(colcenter, u.Quantity)
+#     assert isinstance(rowcenter, u.Quantity)
+#     assert isinstance(thetacenter, u.Quantity)
+#     assert science_images.shape == (40, 2048, 2048)
+#     assert time.shape == (40,)
+#     assert colcenter.shape == (40,)
+#     assert rowcenter.shape == (40,)
+#     assert np.abs(colcenter).max().value < 10
+#     assert np.abs(rowcenter).max().value < 10

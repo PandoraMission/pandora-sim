@@ -236,7 +236,7 @@ class PSF(object):
                 getattr(self, self.dimension_names[dim] + "1d").value,
                 PSF0,
             )
-        return PSF0
+        return PSF0 / PSF0.sum()
 
     def prf(self, point, location=None, freeze_dimensions=None):
         """
@@ -291,9 +291,9 @@ class PSF(object):
             [psf1[cyc == c].sum(axis=0) / (cyc == c).sum() for c in rowbin]
         )
         # We need to renormalize psf2 here
-        psf2 /= np.trapz(np.trapz(psf2, colbin, axis=1), rowbin)
+        # psf2 /= np.trapz(np.trapz(psf2, colbin, axis=1), rowbin)
 
-        return rowbin.astype(int), colbin.astype(int), psf2
+        return rowbin.astype(int), colbin.astype(int), psf2 / psf2.sum()
 
     def __repr__(self):
         return f"{self.ndims}D PSF Model [{', '.join(self.dimension_names)}]"

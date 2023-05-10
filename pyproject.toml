@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pandorasat"
-version = "0.3.0"
+version = "0.4.0"
 description = ""
 authors = ["Christina Hedges <christina.l.hedges@nasa.gov>"]
 
@@ -15,6 +15,7 @@ pysynphot = ">=2.0.0"
 astroquery = "^0.4.6"
 pytest-remotedata = "^0.4.0"
 pygments = "2.11.0"
+setuptools = "^67.7.2"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
@@ -32,6 +33,9 @@ matplotlib = "^3.5.2"
 lxml = "^4.8.0"
 line-profiler = "^3.5.1"
 grismconf = "^1.32"
+
+[tool.poetry.group.dev.dependencies]
+notebook = "^6.5.4"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

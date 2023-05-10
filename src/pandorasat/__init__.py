@@ -1,8 +1,9 @@
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 # Standard library
 import os  # noqa
 
 PACKAGEDIR = os.path.abspath(os.path.dirname(__file__))
+PANDORASTYLE = "{}/data/pandora.mplstyle".format(PACKAGEDIR)
 
 # Standard library
 import logging  # noqa: E402
