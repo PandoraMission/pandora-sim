@@ -8,7 +8,7 @@ from pandorasat import PACKAGEDIR, PSF, PandoraSat, Target, __version__
 
 
 def test_version():
-    assert __version__ == "0.4.0"
+    assert __version__ == "0.4.1"
 
 
 def test_pandorasat():
