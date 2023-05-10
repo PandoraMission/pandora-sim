@@ -38,8 +38,8 @@ class PandoraSat(object):
         theta: u.Quantity,
         obstime: Time = Time.now(),
         duration: u.Quantity = 60 * u.minute,
-        rowjitter_1sigma: u.Quantity = 0.2 * u.pixel,
-        coljitter_1sigma: u.Quantity = 0.2 * u.pixel,
+        rowjitter_1sigma: u.Quantity = 0.25 * u.pixel,
+        coljitter_1sigma: u.Quantity = 0.5 * u.pixel,
         thetajitter_1sigma: u.Quantity = 0.0005 * u.deg,
         jitter_timescale: u.Quantity = 1 * u.second,
     ):
