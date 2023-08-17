@@ -335,7 +335,7 @@ class NIRDetector(Detector):
             #            x, y, prf = self._bin_prf(wavelength=wav[pdx], center=(pix[pdx], 0))
             try:
                 y, x, prf = self.psf.prf(
-                    [wav[pdx], temperature], location=(pix[pdx] + yc, xc)
+                    [wav[pdx], temperature], location=(pix[pdx] + yc, xc),
                 )
             except OutOfBoundsError:
                 continue
@@ -343,9 +343,9 @@ class NIRDetector(Detector):
             Y, X = np.meshgrid(y, x, indexing="ij")
             k = (X > 0) & (Y > 0) & (X < ar.shape[1]) & (Y < ar.shape[0])
             ar[Y[k], X[k]] += np.nan_to_num(prf[k] * integral.value)
-        ar = self.apply_gain(ar * u.DN)
-        ar *= 1 / u.second
-        return wav_edges[np.isfinite(wav_edges).all(axis=1)].value, ar
+#        ar = self.apply_gain(ar * u.DN)
+#        ar *= 1 / u.second
+        return wav_edges[np.isfinite(wav_edges).all(axis=1)].value, ar * u.DN/u.second
 
     def get_frames(
         self,
@@ -432,6 +432,23 @@ class NIRDetector(Detector):
     def apply_gain(self, values: u.Quantity):
         """Applies a single gain value"""
         return values * 0.5 * u.electron / u.DN
+
+
+    def get_background_light_estimate(self, ra, dec, duration, shape=None):
+        """Placeholder, will estimate the background light at different locations?
+        Background in one integration...!
+        """
+        # This is an approximate value assuming a zodi of ~22 Vmag
+        bkg_rate = 4*u.electron/u.second
+        if shape is None:
+            shape = self.shape
+        bkg = u.Quantity(
+            np.random.poisson(lam=(bkg_rate*duration).to(u.electron).value, size=shape).astype(int),
+            unit="electron",
+            dtype="int",
+        )
+        return bkg
+
 
     def get_trace_positions(self, ra, dec, pixel_resolution=2, plot=False):
         """Finds the position of a trace, accounting for WCS distortions

@@ -38,10 +38,10 @@ class PandoraSat(object):
         theta: u.Quantity,
         obstime: Time = Time.now(),
         duration: u.Quantity = 60 * u.minute,
-        rowjitter_1sigma: u.Quantity = 0.25 * u.pixel,
-        coljitter_1sigma: u.Quantity = 0.5 * u.pixel,
+        rowjitter_1sigma: u.Quantity = 0.2 * u.pixel,
+        coljitter_1sigma: u.Quantity = 0.2 * u.pixel,
         thetajitter_1sigma: u.Quantity = 0.0005 * u.deg,
-        jitter_timescale: u.Quantity = 1 * u.second,
+        jitter_timescale: u.Quantity = 60 * u.second,
     ):
         self.ra, self.dec, self.theta, self.obstime, self.duration = (
             ra,
@@ -518,7 +518,7 @@ class PandoraSat(object):
         return ax
 
     def plot_FFI(
-        self, nreads=10, include_cosmics=False, include_noise=True, **kwargs
+        self, nreads=10, include_cosmics=False, include_noise=True, figsize=(10, 8), subarrays=True, freeze_dimensions=[2, 3], **kwargs
     ):
         _, ffis = self.VISDA.get_FFIs(
             self.SkyCatalog,
@@ -526,12 +526,13 @@ class PandoraSat(object):
             nframes=1,
             include_cosmics=include_cosmics,
             include_noise=include_noise,
+            freeze_dimensions=freeze_dimensions,
         )
         with plt.style.context(PANDORASTYLE):
             vmin = kwargs.pop("vmin", self.VISDA.bias.value)
             vmax = kwargs.pop("vmax", self.VISDA.bias.value + 20)
             cmap = kwargs.pop("cmap", "Greys_r")
-            fig, ax = plt.subplots(figsize=(10, 8))
+            fig, ax = plt.subplots(figsize=figsize)
             im = ax.imshow(
                 ffis[0],
                 origin="lower",
@@ -554,24 +555,25 @@ class PandoraSat(object):
             ax.set_xlim(0, self.VISDA.shape[0])
             ax.set_ylim(0, self.VISDA.shape[1])
 
-            def plot_corner(c, ax, **kwargs):
-                ax.plot(
-                    [
-                        c[1],
-                        c[1] + self.VISDA.subarray_size[1],
-                        c[1] + self.VISDA.subarray_size[1],
-                        c[1],
-                        c[1],
-                    ],
-                    [
-                        c[0],
-                        c[0],
-                        c[0] + self.VISDA.subarray_size[0],
-                        c[0] + self.VISDA.subarray_size[0],
-                        c[0],
-                    ],
-                    **kwargs,
-                )
+            if subarrays:
+                def plot_corner(c, ax, **kwargs):
+                    ax.plot(
+                        [
+                            c[1],
+                            c[1] + self.VISDA.subarray_size[1],
+                            c[1] + self.VISDA.subarray_size[1],
+                            c[1],
+                            c[1],
+                        ],
+                        [
+                            c[0],
+                            c[0],
+                            c[0] + self.VISDA.subarray_size[0],
+                            c[0] + self.VISDA.subarray_size[0],
+                            c[0],
+                        ],
+                        **kwargs,
+                    )
 
-            [plot_corner(c, ax, color="r") for c in self.VISDA.corners]
+                [plot_corner(c, ax, color="r") for c in self.VISDA.corners]
         return fig

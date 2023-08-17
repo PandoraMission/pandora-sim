@@ -341,7 +341,7 @@ class VisibleDetector(Detector):
 
         return fastPRF
 
-    def get_background_light_estimate(self, ra, dec, shape=None):
+    def get_background_light_estimate(self, ra, dec, duration, shape=None):
         """Placeholder, will estimate the background light at different locations?
         Background in one integration...!
         """
@@ -353,10 +353,12 @@ class VisibleDetector(Detector):
         #     unit="electron",
         #     dtype="int",
         # )
+        # This is an approximate value assuming a zodi of ~22 Vmag
+        bkg_rate = 1.2*u.electron/u.second
         if shape is None:
             shape = self.shape
         bkg = u.Quantity(
-            np.random.poisson(lam=1, size=shape).astype(int),
+            np.random.poisson(lam=(bkg_rate*duration).to(u.electron).value, size=shape).astype(int),
             unit="electron",
             dtype="int",
         )
@@ -548,7 +550,7 @@ class VisibleDetector(Detector):
             # # background light?
             for tdx in range(science_image.shape[0]):
                 science_image[tdx] += self.get_background_light_estimate(
-                    catalog.loc[0, "ra"], catalog.loc[0, "dec"], shape
+                    catalog.loc[0, "ra"], catalog.loc[0, "dec"], nreads * self.integration_time, shape
                 ).value.astype(int)
                 science_image[tdx] += np.random.normal(
                     loc=self.bias.value,
@@ -587,8 +589,10 @@ class VisibleDetector(Detector):
         corner,
         nreads=50,
         nframes=10,
+        freeze_dimensions=[2, 3],
         quiet=False,
         time_series_generators=None,
+        include_noise=True
     ):
         f = np.zeros((nframes, *self.subarray_size), dtype=int)
         time = self.time[: nreads * nframes]
@@ -603,7 +607,7 @@ class VisibleDetector(Detector):
             if tsgenerator is None:
                 tsgenerator = lambda x: 1  # noqa
 
-            prf = self.prf(row=m.vis_row, col=m.vis_column, corner=corner)
+            prf = self.prf(row=m.vis_row, col=m.vis_column, corner=corner, freeze_dimensions=freeze_dimensions)
             for tdx in tqdm(
                 range(nframes),
                 desc="Times",
@@ -624,34 +628,32 @@ class VisibleDetector(Detector):
                         unit=u.DN,
                     )
                 ).value
-        for tdx in range(nframes):
-            f[tdx] += (
-                self.get_background_light_estimate(
-                    cat.loc[0, "ra"], cat.loc[0, "dec"], self.subarray_size
-                )
-                * nreads
-            ).value.astype(int)
-            f[tdx] += np.random.normal(
-                loc=self.bias.value,
-                scale=self.read_noise.value,
-                size=self.subarray_size,
-            ).astype(int)
-
-            f[tdx] += np.random.poisson(
-                lam=(self.dark * self.integration_time * nreads).value,
-                size=self.subarray_size,
-            ).astype(int)
+        if include_noise:
+            for tdx in range(nframes):
+                f[tdx] += (
+                    self.get_background_light_estimate(
+                        cat.loc[0, "ra"], cat.loc[0, "dec"], nreads*self.integration_time, self.subarray_size
+                    )
+                ).value.astype(int)
+                f[tdx] += np.random.normal(
+                    loc=self.bias.value,
+                    scale=self.read_noise.value,
+                    size=self.subarray_size,
+                ).astype(int)
+                f[tdx] += np.random.poisson(
+                    lam=(self.dark * self.integration_time * nreads).value,
+                    size=self.subarray_size,
+                ).astype(int)
 
         apers = np.asarray(
             [
-                self.get_aper(row=m.vis_row, col=m.vis_column, corner=corner)
+                self.get_aper(row=m.vis_row, col=m.vis_column, corner=corner, freeze_dimensions=freeze_dimensions)
                 for idx, m in cat.iterrows()
             ]
         )
         return time, f, apers
 
-    def plot_TPFs(self, nreads=50, **kwargs):
-        nreads = 50
+    def plot_TPFs(self, nreads=50, include_noise=False, **kwargs):
         with plt.style.context(PANDORASTYLE):
             fig, ax = plt.subplots(
                 1, len(self.Catalogs), figsize=(len(self.Catalogs) * 2, 2)
@@ -667,6 +669,7 @@ class VisibleDetector(Detector):
                     nreads=nreads,
                     nframes=1,
                     quiet=True,
+                    include_noise=include_noise,
                 )
                 _ = ax[idx].imshow(
                     f[0],
@@ -682,19 +685,19 @@ class VisibleDetector(Detector):
 
         return fig
 
-    def get_aper(self, row=0, col=0, corner=(0, 0), shape=None):
+    def get_aper(self, row=0, col=0, corner=(0, 0), shape=None, freeze_dimensions=[2, 3]):
         if shape is None:
             shape = self.subarray_size
         aper = np.zeros(shape)
         for idx in np.arange(0, 1, 0.1):
             for jdx in np.arange(0, 1, 0.1):
                 aper += self.prf(
-                    row=row + idx, col=col + jdx, corner=corner, shape=shape
+                    row=row + idx, col=col + jdx, corner=corner, shape=shape, freeze_dimensions=freeze_dimensions,
                 )
         aper /= 100
         return aper > 0.005
 
-    def get_target_timeseries(self, ts_func=None, nreads=50, subarray=0):
+    def get_target_timeseries(self, ts_func=None, nreads=50, subarray=0, freeze_dimensions=[2, 3]):
         cat = self.Catalogs[subarray]
         corner = self.corners[subarray]
         time_series_generators = np.hstack(
@@ -706,6 +709,7 @@ class VisibleDetector(Detector):
             nreads=nreads,
             nframes=len(self.time) // nreads,
             time_series_generators=time_series_generators,
+            freeze_dimensions=freeze_dimensions,
             quiet=True,
         )
         return time, f[:, apers[0]].sum(axis=1)

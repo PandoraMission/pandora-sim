@@ -20,7 +20,6 @@ from astroquery.vizier import Vizier
 from . import PANDORASTYLE, logger
 from .utils import get_phoenix_model, get_planets, get_sky_catalog
 
-
 @dataclass
 class Target(object):
     name: str
@@ -52,6 +51,7 @@ class Target(object):
             )
         except URLError:
             logger.warning("Can not access internet to get planet ephemerides")
+
 
     @staticmethod
     def from_gaia(coord: Union[str, SkyCoord]):
@@ -167,6 +167,7 @@ class Target(object):
                 * (self.planets[planet]["pl_trandep"].value / 100)
             )
         return lc + 1
+
 
     def _get_SED(self, radius=2):
         """Get the SED data for the target from Vizier

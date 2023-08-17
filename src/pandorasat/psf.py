@@ -4,6 +4,7 @@ import astropy.units as u
 import numpy as np
 from astropy.io import fits
 
+from typing import Union
 from . import PACKAGEDIR
 
 """Generic PSF class"""
@@ -31,7 +32,8 @@ class PSF(object):
 
         """
         self.psf_flux = psf_flux
-        if transpose:
+        self.transpose = transpose
+        if self.transpose:
             self.psf_flux = self.psf_flux.transpose(
                 [1, 0, *np.arange(2, self.psf_flux.ndim)]
             )
@@ -119,7 +121,6 @@ class PSF(object):
         )
 
     def validate(self):
-
         self.shape = self.psf_flux.shape[:2]
         self.ndims = len(self.dimension_names)
 
@@ -171,6 +172,22 @@ class PSF(object):
         self.midpoint = tuple(
             [getattr(self, name + "0d") for name in self.dimension_names]
         )
+        for dim, p in enumerate(self.dimension_names):
+            lp = getattr(self, self.dimension_names[dim])
+            setattr(self, p + "_bounds", [lp.min(), lp.max()])
+
+    def _get_dim(self, dim: Union[int, str]):
+        """Return the numeric dimension of an input int or string"""
+        if isinstance(dim, int):
+            if (dim > self.ndims) | (dim < 0):
+                raise ValueError(f"No dimension `{dim}`")
+            l = dim
+        elif isinstance(dim, str):
+            l = np.where(np.asarray(self.dimension_names) == dim.lower())[0]
+            if len(l) == 0:
+                raise ValueError(f"No dimension `{dim}`")
+            l = l[0]
+        return l
 
     def _check_bounds(self, point):
         """Check a given point has the right shape, units and values in bounds"""
@@ -188,14 +205,14 @@ class PSF(object):
         )
         # Check in bounds
         for dim, p in enumerate(point):
-            lp = getattr(self, self.dimension_names[dim])
-            if (p < lp.min()) | (p > lp.max()):
+            bounds = getattr(self, self.dimension_names[dim] + "_bounds")
+            if (p < bounds[0]) | (p > bounds[1]):
                 raise OutOfBoundsError(
                     f"Point ({p}) out of {self.dimension_names[dim]} bounds."
                 )
         return point
 
-    def psf(self, point, freeze_dimensions=None):
+    def psf(self, point, check_bounds=True):  # , freeze_dimensions=None):
         """Interpolate the PSF cube to a particular point
 
         Parameters
@@ -211,24 +228,25 @@ class PSF(object):
         """
         if not isinstance(point, (list, tuple)):
             point = [point]
-        if freeze_dimensions is None:
-            freeze_dimensions = []
-        if isinstance(freeze_dimensions, (int, str)):
-            freeze_dimensions = [freeze_dimensions]
-        if len(freeze_dimensions) != 0:
-            point = list(point)
-            for dim in freeze_dimensions:
-                if isinstance(dim, int):
-                    if (dim > self.ndims) | (dim < 0):
-                        raise ValueError(f"No dimension `{dim}`")
-                    point[dim] = self.midpoint[dim]
-                elif isinstance(dim, str):
-                    l = np.where(np.asarray(self.dimension_names) == dim)[0]
-                    if len(l) == 0:
-                        raise ValueError(f"No dimension `{dim}`")
-                    point[l[0]] = self.midpoint[l[0]]
-            point = tuple(point)
-        point = self._check_bounds(point)
+        # if freeze_dimensions is None:
+        #     freeze_dimensions = []
+        # if isinstance(freeze_dimensions, (int, str)):
+        #     freeze_dimensions = [freeze_dimensions]
+        # if len(freeze_dimensions) != 0:
+        #     point = list(point)
+        #     for dim in freeze_dimensions:
+        #         if isinstance(dim, int):
+        #             if (dim > self.ndims) | (dim < 0):
+        #                 raise ValueError(f"No dimension `{dim}`")
+        #             point[dim] = self.midpoint[dim]
+        #         elif isinstance(dim, str):
+        #             l = np.where(np.asarray(self.dimension_names) == dim)[0]
+        #             if len(l) == 0:
+        #                 raise ValueError(f"No dimension `{dim}`")
+        #             point[l[0]] = self.midpoint[l[0]]
+        #     point = tuple(point)
+        if check_bounds:
+            point = self._check_bounds(point)
         PSF0 = self.psf_flux
         for dim, p in enumerate(point):
             PSF0 = interpfunc(
@@ -238,7 +256,9 @@ class PSF(object):
             )
         return PSF0 / PSF0.sum()
 
-    def prf(self, point, location=None, freeze_dimensions=None):
+    def prf(
+        self, point, location=None, check_bounds=True
+    ):  # , freeze_dimensions=None):
         """
         Bins the PSF down to the pixel scale.
 
@@ -278,14 +298,16 @@ class PSF(object):
         ]
 
         mod = (self.psf_column.value + location[1].value) % 1
-        cyc = (self.psf_column.value + location[1].value) - mod
+        cyc = ((self.psf_column.value + location[1].value) - mod).astype(int)
         colbin = np.unique(cyc)
-        psf0 = self.psf(point, freeze_dimensions=freeze_dimensions)
+        psf0 = self.psf(
+            point, check_bounds=check_bounds
+        )  # , freeze_dimensions=freeze_dimensions)
         psf1 = np.asarray(
             [psf0[:, cyc == c].sum(axis=1) / (cyc == c).sum() for c in colbin]
         ).T
         mod = (self.psf_row.value + location[0].value) % 1
-        cyc = (self.psf_row.value + location[0].value) - mod
+        cyc = ((self.psf_row.value + location[0].value) - mod).astype(int)
         rowbin = np.unique(cyc)
         psf2 = np.asarray(
             [psf1[cyc == c].sum(axis=0) / (cyc == c).sum() for c in rowbin]
@@ -297,6 +319,37 @@ class PSF(object):
 
     def __repr__(self):
         return f"{self.ndims}D PSF Model [{', '.join(self.dimension_names)}]"
+
+    def fix_dimension(self, **args):
+        """Drop a dimension of the PSF model?"""
+        freeze_dictionary = args
+        dnms = self.dimension_names.copy()
+        duns = self.dimension_units.copy()
+        for key, point in freeze_dictionary.items():
+            dim = self._get_dim(key)
+            PSF0 = interpfunc(
+                point.to(duns[dim]).value,
+                getattr(self, dnms[dim] + "1d").value,
+                reorder(self.psf_flux, dim),
+            )
+            dnms.pop(dim)
+            duns.pop(dim)
+        psf2 = PSF(
+            [
+                getattr(self, dnm).transpose(
+                    np.hstack(
+                        [dim, list(set(np.arange(self.ndims)) - set([dim]))]
+                    )
+                )[0]
+                for dnm in dnms
+            ],
+            PSF0,
+            dnms,
+            duns,
+            self.pixel_size,
+            self.sub_pixel_size,
+        )
+        return psf2
 
 
 def interpfunc(l, lp, PSF0):
@@ -314,6 +367,23 @@ def interpfunc(l, lp, PSF0):
         slope = (PSF0[:, :, d[0]] - PSF0[:, :, d[1]]) / (lp[d[0]] - lp[d[1]])
         PSF1 = PSF0[:, :, d[1]] + (slope * (l - lp[d[1]]))
     return PSF1
+
+
+def reorder(ar: np.ndarray, dim: int = 0):
+    """Reorders a PSF array so that a different dimension is in the front, this helps when we interpolate."""
+    if not isinstance(dim, (int, list, np.int_)):
+        raise ValueError("Pass an `int` or a `list` of `int`s.")
+    if not (ar.ndim - 2) > (np.max(dim)):
+        raise ValueError(
+            f"No dimension {[d + 2 for d in dim]} in array shape {ar.shape}"
+        )
+    if np.min(dim) < 0:
+        raise ValueError(f"Can not reorder the first two dimensions.")
+    if not hasattr(dim, "__iter__"):
+        dim = [dim]
+    cdim = [d + 2 for d in dim]
+    l = set(np.arange(ar.ndim)[2:]) - set(cdim)
+    return ar.transpose(np.hstack([0, 1, cdim, list(l)]))
 
 
 class OutOfBoundsError(Exception):
