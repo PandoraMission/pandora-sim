@@ -3,6 +3,8 @@
 import astropy.units as u
 import numpy as np
 from astropy.io import fits
+from astropy.convolution import convolve, Gaussian2DKernel
+from copy import deepcopy
 
 from typing import Union
 from . import PACKAGEDIR
@@ -22,6 +24,8 @@ class PSF(object):
         pixel_size,
         sub_pixel_size,
         transpose=False,
+        freeze_dictionary={},
+        blur_value=(0 * u.pixel, 0 * u.pixel),
     ):
         """PSF class. Takes in a PSF cube.
 
@@ -31,16 +35,18 @@ class PSF(object):
 
 
         """
-        self.psf_flux = psf_flux
+        self._psf_flux = psf_flux
         self.transpose = transpose
         if self.transpose:
-            self.psf_flux = self.psf_flux.transpose(
-                [1, 0, *np.arange(2, self.psf_flux.ndim)]
+            self._psf_flux = self._psf_flux.transpose(
+                [1, 0, *np.arange(2, self._psf_flux.ndim)]
             )
         self.dimension_names = dimension_names
         self.dimension_units = dimension_units
         self.pixel_size = pixel_size
         self.sub_pixel_size = sub_pixel_size
+        self.freeze_dictionary = freeze_dictionary
+        self.blur_value = blur_value
 
         for name, x in zip(dimension_names, X):
             setattr(self, name, x)
@@ -51,6 +57,7 @@ class PSF(object):
     def from_file(
         filename=f"{PACKAGEDIR}/data/pandora_vis_20220506.fits",
         transpose=False,
+        blur_value=(0 * u.pixel, 0 * u.pixel),
     ):
         """PSF class. Takes in a PSF cube fits file.
 
@@ -118,10 +125,12 @@ class PSF(object):
             dimension_units,
             pixel_size,
             sub_pixel_size,
+            transpose=transpose,
+            blur_value=blur_value,
         )
 
     def validate(self):
-        self.shape = self.psf_flux.shape[:2]
+        self.shape = self._psf_flux.shape[:2]
         self.ndims = len(self.dimension_names)
 
         if self.ndims == 1:
@@ -152,9 +161,9 @@ class PSF(object):
                     np.where(reshape == idx)[0][0]
                     for idx in range(len(reshape))
                 ]
-                self.psf_flux = self.psf_flux.transpose(reshape)[s].transpose(
-                    deshape
-                )
+                self._psf_flux = self._psf_flux.transpose(reshape)[
+                    s
+                ].transpose(deshape)
                 midpoint = getattr(self, self.dimension_names[dim] + "1d")
                 midpoint = midpoint[len(midpoint) // 2]
                 setattr(self, self.dimension_names[dim] + "0d", midpoint)
@@ -175,6 +184,9 @@ class PSF(object):
         for dim, p in enumerate(self.dimension_names):
             lp = getattr(self, self.dimension_names[dim])
             setattr(self, p + "_bounds", [lp.min(), lp.max()])
+        self.blur(self.blur_value)
+        self._psf_flux_jitter = np.zeros_like(self._psf_flux)
+        self.psf_flux = self._psf_flux_blur + self._psf_flux_jitter
 
     def _get_dim(self, dim: Union[int, str]):
         """Return the numeric dimension of an input int or string"""
@@ -212,7 +224,87 @@ class PSF(object):
                 )
         return point
 
-    def psf(self, point, check_bounds=True):  # , freeze_dimensions=None):
+    def blur(self, blur_value):
+        """Blurs the PSF using a Gaussian Kernel
+
+        Parameters:
+        -----------
+        blur_value: tuple of astropy quantities, must be in pixels
+        """
+        xstd, ystd = blur_value
+        if not hasattr(xstd, "unit"):
+            xstd *= u.pixel
+        if not hasattr(ystd, "unit"):
+            ystd *= u.pixel
+        if np.any([(not (xstd.unit == u.pix)), (not (ystd.unit == u.pix))]):
+            raise ValueError("Must pass `blur_value` in units of pixel.")
+
+        xstd = ((self.pixel_size * xstd) / self.sub_pixel_size).value
+        ystd = ((self.pixel_size * ystd) / self.sub_pixel_size).value
+        a = deepcopy(self._psf_flux)
+        if (xstd == 0) & (ystd == 0):
+            self._psf_flux_blur = deepcopy(self._psf_flux)
+            self._psf_flux_blur_grad = np.asarray(
+                np.gradient(self._psf_flux_blur, axis=(0, 1))
+            )  # [:, None]
+            return
+        s = a.shape
+        a = a.reshape((s[0], s[1], np.product(s[2:])))
+        b = np.asarray(
+            [
+                convolve(
+                    a[:, :, idx],
+                    Gaussian2DKernel(
+                        xstd,
+                        ystd,
+                    ),
+                )
+                for idx in range(a.shape[2])
+            ]
+        ).transpose([1, 2, 0])
+        b = b.reshape(s)
+        b /= b.sum(axis=(0, 1))[None, None]
+        self._psf_flux_blur = b
+        self._psf_flux_blur_grad = np.asarray(
+            np.gradient(self._psf_flux_blur, axis=(0, 1))
+        )
+        self.psf_flux = self._psf_flux_blur + self._psf_flux_jitter
+        return
+
+    def jitter(self, row, column):
+        def grow(ar, ndims):
+            for i in range(ndims):
+                ar = ar[:, None]
+            return ar
+
+        def downsample(ar, npoints):
+            nbin = np.ceil(ar.shape[0] / npoints).astype(int)
+            a = np.asarray(
+                [ar[idx * nbin : (idx + 1) * nbin] for idx in range(npoints)]
+            )
+            mean, weight = np.asarray([a1.mean() for a1 in a]), np.asarray(
+                [len(a1) for a1 in a]
+            )
+            return mean, weight / weight.max()
+
+        if len(row) > 5:
+            row = downsample(row, 5)
+            column = downsample(column, 5)
+        npoints = np.min([5, len(row)])
+        print(npoints, row)
+        self._psf_flux_jitter *= 0
+        if (row.sum() == 0) & (column.sum() == 0):
+            self.psf_flux = self._psf_flux_blur + self._psf_flux_jitter
+            return
+        g1, g2 = self._psf_flux_blur_grad
+        self._psf_flux_jitter = (
+            g1 * grow(row / npoints, self.ndims + 2)
+            + g2 * grow(column / npoints, self.ndims + 2)
+        ).sum(axis=0)
+        self.psf_flux = self._psf_flux_blur + self._psf_flux_jitter
+        return
+
+    def psf(self, point, check_bounds=True):
         """Interpolate the PSF cube to a particular point
 
         Parameters
@@ -228,23 +320,6 @@ class PSF(object):
         """
         if not isinstance(point, (list, tuple)):
             point = [point]
-        # if freeze_dimensions is None:
-        #     freeze_dimensions = []
-        # if isinstance(freeze_dimensions, (int, str)):
-        #     freeze_dimensions = [freeze_dimensions]
-        # if len(freeze_dimensions) != 0:
-        #     point = list(point)
-        #     for dim in freeze_dimensions:
-        #         if isinstance(dim, int):
-        #             if (dim > self.ndims) | (dim < 0):
-        #                 raise ValueError(f"No dimension `{dim}`")
-        #             point[dim] = self.midpoint[dim]
-        #         elif isinstance(dim, str):
-        #             l = np.where(np.asarray(self.dimension_names) == dim)[0]
-        #             if len(l) == 0:
-        #                 raise ValueError(f"No dimension `{dim}`")
-        #             point[l[0]] = self.midpoint[l[0]]
-        #     point = tuple(point)
         if check_bounds:
             point = self._check_bounds(point)
         PSF0 = self.psf_flux
@@ -318,7 +393,8 @@ class PSF(object):
         return rowbin.astype(int), colbin.astype(int), psf2 / psf2.sum()
 
     def __repr__(self):
-        return f"{self.ndims}D PSF Model [{', '.join(self.dimension_names)}]"
+        freeze_dictionary = f" ({', '.join([f'{key}: {item}' for key, item in self.freeze_dictionary.items()])})"
+        return f"{self.ndims}D PSF Model [{', '.join(self.dimension_names)}]{freeze_dictionary}"
 
     def fix_dimension(self, **args):
         """Drop a dimension of the PSF model?"""
@@ -330,10 +406,12 @@ class PSF(object):
             PSF0 = interpfunc(
                 point.to(duns[dim]).value,
                 getattr(self, dnms[dim] + "1d").value,
-                reorder(self.psf_flux, dim),
+                reorder(self._psf_flux, dim),
             )
             dnms.pop(dim)
             duns.pop(dim)
+
+        freeze_dictionary.update(self.freeze_dictionary)
         psf2 = PSF(
             [
                 getattr(self, dnm).transpose(
@@ -348,6 +426,8 @@ class PSF(object):
             duns,
             self.pixel_size,
             self.sub_pixel_size,
+            freeze_dictionary=freeze_dictionary,
+            blur_value=self.blur_value,
         )
         return psf2
 

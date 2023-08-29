@@ -73,13 +73,18 @@ class PandoraSat(object):
         self.coljitter_1sigma = coljitter_1sigma
         self.thetajitter_1sigma = thetajitter_1sigma
         self.jitter_timescale = jitter_timescale
-        #        self._get_jitter()
+        self._get_jitter()
         self.SkyCatalog = self.get_sky_catalog()
 
         nints = (duration.to(u.s) / self.VISDA.integration_time).value
         self.VISDA.time = (
             self.obstime.jd
             + np.arange(0, nints) / nints * duration.to(u.day).value
+        )
+        self.VISDA.rowj, self.VISDA.colj, self.VISDA.thetaj = (  # noqa
+            np.interp(self.VISDA.time, self.jitter.time, self.jitter.rowj),
+            np.interp(self.VISDA.time, self.jitter.time, self.jitter.colj),
+            np.interp(self.VISDA.time, self.jitter.time, self.jitter.thetaj),
         )
 
         self.VISDA.corners, self.VISDA.Catalogs = self.get_vis_stars()
@@ -518,7 +523,13 @@ class PandoraSat(object):
         return ax
 
     def plot_FFI(
-        self, nreads=10, include_cosmics=False, include_noise=True, figsize=(10, 8), subarrays=True, freeze_dimensions=[2, 3], **kwargs
+        self,
+        nreads=10,
+        include_cosmics=False,
+        include_noise=True,
+        figsize=(10, 8),
+        subarrays=True,
+        **kwargs,
     ):
         _, ffis = self.VISDA.get_FFIs(
             self.SkyCatalog,
@@ -526,7 +537,7 @@ class PandoraSat(object):
             nframes=1,
             include_cosmics=include_cosmics,
             include_noise=include_noise,
-            freeze_dimensions=freeze_dimensions,
+            #            freeze_dimensions=freeze_dimensions,
         )
         with plt.style.context(PANDORASTYLE):
             vmin = kwargs.pop("vmin", self.VISDA.bias.value)
@@ -556,6 +567,7 @@ class PandoraSat(object):
             ax.set_ylim(0, self.VISDA.shape[1])
 
             if subarrays:
+
                 def plot_corner(c, ax, **kwargs):
                     ax.plot(
                         [
