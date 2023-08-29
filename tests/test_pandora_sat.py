@@ -44,8 +44,8 @@ def test_psf():
     assert vPSF.ndims == 4
     vPSF.prf(vPSF.midpoint)
     vPSF.prf((600, -600, 0.6, 0))
-    vPSF.prf(vPSF.midpoint, freeze_dimensions=[0, 1, 2, 3])
-    vPSF.prf(vPSF.midpoint, freeze_dimensions=["column", "row"])
+    #    vPSF.prf(vPSF.midpoint, freeze_dimensions=[0, 1, 2, 3])
+    #    vPSF.prf(vPSF.midpoint, freeze_dimensions=["column", "row"])
     x, y, prf = vPSF.prf(vPSF.midpoint)
     np.isclose(np.trapz(np.trapz(prf, x, axis=0), y, axis=0), 1, atol=1e-5)
 

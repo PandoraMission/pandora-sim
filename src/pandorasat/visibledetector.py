@@ -8,7 +8,6 @@ import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from astropy.convolution import Gaussian2DKernel, convolve
 from astropy.io import fits, votable
 from tqdm import tqdm
 

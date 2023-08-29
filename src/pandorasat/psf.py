@@ -1,12 +1,14 @@
 """Work with Point Spread Functions"""
+# Standard library
+from copy import deepcopy
+from typing import Union
+
 # Third-party
 import astropy.units as u
 import numpy as np
+from astropy.convolution import Gaussian2DKernel, convolve
 from astropy.io import fits
-from astropy.convolution import convolve, Gaussian2DKernel
-from copy import deepcopy
 
-from typing import Union
 from . import PACKAGEDIR
 
 """Generic PSF class"""
@@ -458,7 +460,7 @@ def reorder(ar: np.ndarray, dim: int = 0):
             f"No dimension {[d + 2 for d in dim]} in array shape {ar.shape}"
         )
     if np.min(dim) < 0:
-        raise ValueError(f"Can not reorder the first two dimensions.")
+        raise ValueError("Can not reorder the first two dimensions.")
     if not hasattr(dim, "__iter__"):
         dim = [dim]
     cdim = [d + 2 for d in dim]
