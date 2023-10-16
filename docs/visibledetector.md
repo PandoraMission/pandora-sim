@@ -1,6 +1,6 @@
 # Documentation for `VISDA`
 
-::: pandorasat.visibledetector
+::: pandorasim.visibledetector
     handler: python
     rendering:
       show_root_heading: false

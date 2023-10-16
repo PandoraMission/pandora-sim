@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "pandorasat"
+name = "pandorasim"
 version = "0.4.1"
 description = ""
 authors = ["Christina Hedges <christina.l.hedges@nasa.gov>"]
@@ -32,7 +32,6 @@ mkdocs-jupyter = "^0.20.1"
 pytkdocs = "^0.16.1"
 matplotlib = "^3.5.2"
 lxml = "^4.8.0"
-line-profiler = "^3.5.1"
 grismconf = "^1.32"
 
 [tool.poetry.group.dev.dependencies]

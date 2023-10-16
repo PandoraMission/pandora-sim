@@ -1,6 +1,6 @@
 # Documentation for `PSF`
 
-::: pandorasat.psf
+::: pandorasim.psf
     handler: python
     rendering:
       show_root_heading: false

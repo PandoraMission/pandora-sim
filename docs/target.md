@@ -1,6 +1,6 @@
 # Documentation for `Target`
 
-::: pandorasat.Target
+::: pandorasim.Target
     handler: python
     rendering:
       show_root_heading: false

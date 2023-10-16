@@ -4,7 +4,7 @@ import pytest
 from astropy.coordinates import SkyCoord
 
 # First-party/Local
-from pandorasat.targets import Target
+from pandorasim.targets import Target
 
 
 @pytest.mark.remote_data

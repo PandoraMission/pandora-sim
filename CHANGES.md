@@ -1,3 +1,6 @@
+# 0.4.1
+- Renaming to PandoraSim, PandoraSat will be broken out
+
 # 0.3
 - Changed API to enforce row-major indexing everywhere
 - Added `conventions.ipynb` documentation to state conventions

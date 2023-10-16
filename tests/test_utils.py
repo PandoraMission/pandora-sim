@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 # First-party/Local
-from pandorasat.utils import get_sky_catalog
+from pandorasim.utils import get_sky_catalog
 
 
 @pytest.mark.remote_data

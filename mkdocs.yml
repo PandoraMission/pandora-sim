@@ -1,10 +1,10 @@
-site_name: PandoraSat
+site_name: PandoraSim
 nav:
     - Home: README.md
-    - PandoraSat Conventions: conventions.ipynb
+    - PandoraSim Conventions: conventions.ipynb
     - API:
       - Target: target.md
-      - PandoraSat: pandorasat.md
+      - PandoraSim: pandorasim.md
       - NIRDA: irdetector.md
       - VISDA: visibledetector.md
       - PSF: psf.md
@@ -17,7 +17,7 @@ theme:
   name: "material"
   icon:
       logo: material/clipboard
-repo_url: https://github.com/pandoramission/pandora-sat
+repo_url: https://github.com/pandoramission/pandora-sim
 plugins:
   - search
   - mkdocs-jupyter:
@@ -26,4 +26,4 @@ plugins:
       ignore_h1_titles: False
   - mkdocstrings:
       watch:
-        - src/pandorasat
+        - src/pandorasim

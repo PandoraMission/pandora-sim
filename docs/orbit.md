@@ -1,6 +1,6 @@
 # Documentation for `Orbit`
 
-::: pandorasat.orbit
+::: pandorasim.orbit
     handler: python
     rendering:
       show_root_heading: false

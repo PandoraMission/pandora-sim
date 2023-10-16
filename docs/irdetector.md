@@ -1,6 +1,6 @@
 # Documentation for `NIRDA`
 
-::: pandorasat.irdetector
+::: pandorasim.irdetector
     handler: python
     rendering:
       show_root_heading: false
