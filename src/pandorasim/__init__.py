@@ -8,12 +8,12 @@ PANDORASTYLE = "{}/data/pandora.mplstyle".format(PACKAGEDIR)
 # Standard library
 import logging  # noqa: E402
 import shutil  # noqa: E402
-from glob import glob  # noqa: E402
+# from glob import glob  # noqa: E402
 
 # Third-party
 from astropy.utils.data import download_file  # noqa: E402
 
-from .utils import get_flatfield  # noqa: E402
+# from .utils import get_flatfield  # noqa: E402
 
 logging.basicConfig()
 logger = logging.getLogger("pandorasim")
@@ -42,14 +42,14 @@ if not os.path.isfile(f"{PACKAGEDIR}/data/pandora_nir_20220506.fits"):
         f"NIR PSF downloaded to {PACKAGEDIR}/data/pandora_nir_20220506.fits."
     )
 
-flatnames = glob(f"{PACKAGEDIR}/data/flatfield_*.fits")
-if len(flatnames) is None:
-    # Make a bogus flatfield
-    logger.warning("No flatfield file found. Generating a random one for you.")
-    get_flatfield()
-    logger.warning(
-        f"Generated flatfield in {PACKAGEDIR}/data/pandora_nir_20220506.fits."
-    )
+# flatnames = glob(f"{PACKAGEDIR}/data/flatfield_*.fits")
+# if len(flatnames) is None:
+#     # Make a bogus flatfield
+#     logger.warning("No flatfield file found. Generating a random one for you.")
+#     get_flatfield()
+#     logger.warning(
+#         f"Generated flatfield in {PACKAGEDIR}/data/pandora_nir_20220506.fits."
+#     )
 
 from .pandorasim import PandoraSim  # noqa
 from .psf import PSF  # noqa

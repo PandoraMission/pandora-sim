@@ -1,43 +1,66 @@
 """Holds metadata and methods on Pandora VISDA"""
 # Standard library
 import warnings
-from glob import glob
+# from glob import glob
 
 # Third-party
 import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-from astropy.io import fits, votable
+# import pandas as pd
+# from astropy.io import fits
 from tqdm import tqdm
 
+from pandorasat.visibledetector import VisibleDetector as visda
+
 from . import PACKAGEDIR, PANDORASTYLE
-from .detector import Detector
+# from .detector import Detector
 from .psf import PSF, interpfunc
 from .utils import get_simple_cosmic_ray_image
 from .wcs import get_wcs
 
 
-class VisibleDetector(Detector):
-    """Pandora Visible Detector"""
+class VisibleDetector(visda):
+    """
+    Holds methods for simulating data from the Visible Detector on Pandora.
 
-    def _setup(self):
+    Attributes
+    ----------
+
+    ra: float
+        Right Ascension of the pointing
+    dec: float
+        Declination of the pointing
+    theta: float
+        Roll angle of the pointing
+    transpose_psf : bool
+        Transpose the LLNL input PSF file, i.e. rotate 90 degrees
+    """
+
+    def __init__(
+           self,
+            ra: u.Quantity,
+            dec: u.Quantity,
+            theta: u.Quantity,
+            transpose_psf: bool = False,
+            ):
+        self.ra, self.dec, self.theta = (ra, dec, theta)
         """Some detector specific functions to run on initialization"""
-        self.shape = (2048, 2048)
+        # self.shape = (2048, 2048)
         self.psf = PSF.from_file(
             f"{PACKAGEDIR}/data/pandora_vis_20220506.fits",
-            transpose=self.transpose_psf,
+            transpose=transpose_psf,
         )
         self.psf = self.psf.fix_dimension(
             wavelength=self.psf.wavelength0d
         ).fix_dimension(temperature=self.psf.temperature0d)
         self.psf.blur(blur_value=(0.25 * u.pixel, 0.25 * u.pixel))
 
-        self.flat = fits.open(
-            np.sort(
-                np.atleast_1d(glob(f"{PACKAGEDIR}/data/flatfield_VISDA*.fits"))
-            )[-1]
-        )[1].data
+#        self.flat = fits.open(
+#            np.sort(
+#                np.atleast_1d(glob(f"{PACKAGEDIR}/data/flatfield_VISDA*.fits"))
+#            )[-1]
+#        )[1].data
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self.wcs = get_wcs(
@@ -102,52 +125,111 @@ class VisibleDetector(Detector):
             * self.integration_time
         ).value
 
-    @property
-    def _dispersion_df(self):
-        return pd.read_csv(f"{PACKAGEDIR}/data/pixel_vs_wavelength_vis.csv")
+#    @property
+#    def _dispersion_df(self):
+#        return pd.read_csv(f"{PACKAGEDIR}/data/pixel_vs_wavelength_vis.csv")
 
-    def qe(self, wavelength):
+#    def qe(self, wavelength):
+#        """
+#        Calculate the quantum efficiency of the detector.
+
+#        Parameters:
+#            wavelength (npt.NDArray): Wavelength in microns as `astropy.unit`
+
+#        Returns:
+#            qe (npt.NDArray): Array of the quantum efficiency of the detector
+#        """
+#        df = pd.read_csv(f"{PACKAGEDIR}/data/pandora_visible_qe.csv")
+#        wav, transmission = np.asarray(df.Wavelength) * u.angstrom, np.asarray(
+#            df.Transmission
+#        )
+#        return (
+#            np.interp(wavelength, wav, transmission, left=0, right=0)
+#            * u.DN
+#            / u.photon
+#        )
+
+#    @property
+#    def dark(self):
+#        return 1 * u.electron / u.second
+
+#    @property
+#    def read_noise(self):
+#        return 1.5 * u.electron
+
+#    @property
+#    def bias(self):
+#        return 100 * u.electron
+
+#    @property
+#    def integration_time(self):
+#        return 0.2 * u.second
+
+#    @property
+#    def fieldstop_radius(self):
+#        return 0.3 * u.deg
+
+#    def throughput(self, wavelength):
+#        return wavelength.value**0 * 0.714
+
+    def world_to_pixel(self, ra, dec, distortion=True):
+        """Helper function.
+
+        This function ensures we keep the row-major convention in pandora-sim.
         """
-        Calculate the quantum efficiency of the detector.
+        coords = np.vstack(
+            [
+                ra.to(u.deg).value if isinstance(ra, u.Quantity) else ra,
+                dec.to(u.deg).value if isinstance(dec, u.Quantity) else dec,
+            ]
+        ).T
+        if distortion:
+            column, row = self.wcs.all_world2pix(coords, 0).T
+        else:
+            column, row = self.wcs.wcs_world2pix(coords, 0).T
+        return np.vstack([row, column])
 
-        Parameters:
-            wavelength (npt.NDArray): Wavelength in microns as `astropy.unit`
+    def pixel_to_world(self, row, column, distortion=True):
+        """Helper function.
 
-        Returns:
-            qe (npt.NDArray): Array of the quantum efficiency of the detector
+        This function ensures we keep the row-major convention in pandora-sat.
         """
-        df = pd.read_csv(f"{PACKAGEDIR}/data/pandora_visible_qe.csv")
-        wav, transmission = np.asarray(df.Wavelength) * u.angstrom, np.asarray(
-            df.Transmission
+        coords = np.vstack(
+            [
+                column.to(u.pixel).value
+                if isinstance(column, u.Quantity)
+                else column,
+                row.to(u.pixel).value if isinstance(row, u.Quantity) else row,
+            ]
+        ).T
+        if distortion:
+            return self.wcs.all_pix2world(coords, 0).T * u.deg
+        else:
+            return self.wcs.wcs_pix2world(coords, 0).T * u.deg
+
+    def wavelength_to_pixel(self, wavelength):
+        if not hasattr(self, "_dispersion_df"):
+            raise ValueError("No wavelength dispersion information")
+        df = self.det._dispersion_df
+        return np.interp(
+            wavelength,
+            np.asarray(df.Wavelength) * u.micron,
+            np.asarray(df.Pixel) * u.pixel,
+            left=np.nan,
+            right=np.nan,
         )
-        return (
-            np.interp(wavelength, wav, transmission, left=0, right=0)
-            * u.DN
-            / u.photon
+
+    def pixel_to_wavelength(self, pixel):
+        if not hasattr(self, "_dispersion_df"):
+            raise ValueError("No wavelength dispersion information")
+        df = self.det._dispersion_df
+        return np.interp(
+            pixel,
+            np.asarray(df.Pixel) * u.pixel,
+            np.asarray(df.Wavelength) * u.micron,
+            left=np.nan,
+            right=np.nan,
         )
-
-    @property
-    def dark(self):
-        return 1 * u.electron / u.second
-
-    @property
-    def read_noise(self):
-        return 1.5 * u.electron
-
-    @property
-    def bias(self):
-        return 100 * u.electron
-
-    @property
-    def integration_time(self):
-        return 0.2 * u.second
-
-    @property
-    def fieldstop_radius(self):
-        return 0.3 * u.deg
-
-    def throughput(self, wavelength):
-        return wavelength.value**0 * 0.714
 
     def diagnose(
         self,
@@ -378,25 +460,25 @@ class VisibleDetector(Detector):
 
         return bkg
 
-    def apply_gain(self, values: u.Quantity):
-        """Applies a piecewise gain function"""
-        x = np.atleast_1d(values)
-        masks = np.asarray(
-            [
-                (x >= 0 * u.DN) & (x < 1e3 * u.DN),
-                (x >= 1e3 * u.DN) & (x < 5e3 * u.DN),
-                (x >= 5e3 * u.DN) & (x < 2.8e4 * u.DN),
-                (x >= 2.8e4 * u.DN),
-            ]
-        )
-        gain = np.asarray([0.52, 0.6, 0.61, 0.67]) * u.electron / u.DN
-        if values.ndim == 1:
-            gain = gain[:, None]
-        if values.ndim == 2:
-            gain = gain[:, None, None]
-        return u.Quantity(
-            (masks * x[None, :] * gain).sum(axis=0), dtype=int, unit=u.electron
-        )
+#    def apply_gain(self, values: u.Quantity):
+#        """Applies a piecewise gain function"""
+#        x = np.atleast_1d(values)
+#        masks = np.asarray(
+#            [
+#                (x >= 0 * u.DN) & (x < 1e3 * u.DN),
+#                (x >= 1e3 * u.DN) & (x < 5e3 * u.DN),
+#                (x >= 5e3 * u.DN) & (x < 2.8e4 * u.DN),
+#                (x >= 2.8e4 * u.DN),
+#            ]
+#        )
+#        gain = np.asarray([0.52, 0.6, 0.61, 0.67]) * u.electron / u.DN
+#        if values.ndim == 1:
+#            gain = gain[:, None]
+#        if values.ndim == 2:
+#            gain = gain[:, None, None]
+#        return u.Quantity(
+#            (masks * x[None, :] * gain).sum(axis=0), dtype=int, unit=u.electron
+#        )
 
     def prf(
         self,

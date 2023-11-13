@@ -295,7 +295,7 @@ class PSF(object):
         if len(row) > 5:
             row, row_w = downsample(row, 5)
             column, col_w = downsample(column, 5)
-        npoints = np.min([5, len(row)])
+#        npoints = np.min([5, len(row)])
         self._psf_flux_jitter *= 0
         if (row.sum() == 0) & (column.sum() == 0):
             self.psf_flux = self._psf_flux_blur + self._psf_flux_jitter

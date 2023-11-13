@@ -1,4 +1,4 @@
-"""Holds metadata and methods on Pandora"""
+"""Holds methods on Pandora"""
 
 # Standard library
 from copy import deepcopy
@@ -12,17 +12,22 @@ from astropy.time import Time
 from matplotlib.patches import PathPatch
 from matplotlib.path import Path
 
+# from pandorasat.irdetector import NIRDetector
+# from pandorasat.visibledetector import VisibleDetector
+from pandorasat.hardware import Hardware
+from pandorasat.orbit import Orbit
+
 from . import PANDORASTYLE
 from .irdetector import NIRDetector
-from .optics import Optics
-from .orbit import Orbit
+# from .optics import Optics
+# from .orbit import Orbit
 from .utils import get_jitter, get_sky_catalog
 from .visibledetector import VisibleDetector
 
 
 # @dataclass
 class PandoraSim(object):
-    """Holds information and methods for the full Pandora system.
+    """Holds methods for simulating the full Pandora system.
 
     Args:
         NIRDA (IRDetector): Class of the NIRDA properties
@@ -51,23 +56,23 @@ class PandoraSim(object):
             duration,
         )
         self.Orbit = Orbit()
-        self.Optics = Optics()
+        self.Hardware = Hardware()
         self.NIRDA = NIRDetector(
-            "NIR",
+            # "NIR",
             ra,
             dec,
             theta,
-            1.19 * u.arcsec / u.pixel,
-            18.0 * u.um / u.pixel,
+            # 1.19 * u.arcsec / u.pixel,
+            # 18.0 * u.um / u.pixel,
             False,
         )
         self.VISDA = VisibleDetector(
-            "Visible",
+            # "Visible",
             ra,
             dec,
             theta,
-            0.78 * u.arcsec / u.pixel,
-            6.5 * u.um / u.pixel,
+            # 0.78 * u.arcsec / u.pixel,
+            # 6.5 * u.um / u.pixel,
         )
         self.rowjitter_1sigma = rowjitter_1sigma
         self.coljitter_1sigma = coljitter_1sigma

@@ -2,38 +2,70 @@
 
 # Standard library
 import warnings
-from glob import glob
+# from glob import glob
 
 # Third-party
 import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-from astropy.io import fits
+# import pandas as pd
+# from astropy.io import fits
 from matplotlib.patches import Rectangle
 from tqdm import tqdm
 
+from pandorasat.irdetector import NIRDetector as nirda
+# from pandorasat import irdetector
+
 from . import PACKAGEDIR
-from .detector import Detector
+# from .detector import Detector
 from .psf import PSF, OutOfBoundsError
 from .utils import get_jitter
 from .wcs import get_wcs
 
 
-class NIRDetector(Detector):
-    def _setup(self):
-        self.shape = (2048, 512)
+class NIRDetector():
+    """
+    Holds methods for simulating data from the NIR Detector on Pandora.
+
+    Attributes
+    ----------
+
+    ra: float
+        Right Ascension of the pointing
+    dec: float
+        Declination of the pointing
+    theta: float
+        Roll angle of the pointing
+    transpose_psf : bool
+        Transpose the LLNL input PSF file, i.e. rotate 90 degrees
+    """
+
+    def __init__(
+            self,
+            ra: u.Quantity,
+            dec: u.Quantity,
+            theta: u.Quantity,
+            transpose_psf: bool = False,
+            ):
+        self.ra, self.dec, self.theta, = (ra, dec, theta)
+        self.naxis1 = nirda().naxis1
+        self.naxis2 = nirda().naxis2
+        self.pixel_scale = nirda().pixel_scale
+        self.pixel_size = nirda().pixel_size
+        # nirda = irdetector.NIRDetector()
+        # self.shape = nirda.shape
+
         """Some detector specific functions to run on initialization"""
         self.psf = PSF.from_file(
             f"{PACKAGEDIR}/data/pandora_nir_20220506.fits",
-            transpose=self.transpose_psf,
+            transpose=transpose_psf,
         )
         self.psf.blur(blur_value=(0.25 * u.pixel, 0.25 * u.pixel))
-        self.flat = fits.open(
-            np.sort(
-                np.atleast_1d(glob(f"{PACKAGEDIR}/data/flatfield_NIRDA*.fits"))
-            )[-1]
-        )[1].data
+#        self.flat = fits.open(
+#            np.sort(
+#                np.atleast_1d(glob(f"{PACKAGEDIR}/data/flatfield_NIRDA*.fits"))
+#            )[-1]
+#        )[1].data
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self.wcs = get_wcs(
@@ -65,33 +97,33 @@ class NIRDetector(Detector):
         )
         self.trace_range = [-200, 100]
 
-    @property
-    def _dispersion_df(self):
-        return pd.read_csv(f"{PACKAGEDIR}/data/pixel_vs_wavelength.csv")
+#    @property
+#    def _dispersion_df(self):
+#        return pd.read_csv(f"{PACKAGEDIR}/data/pixel_vs_wavelength.csv")
 
-    @property
-    def pixel_read_time(self):
-        return 1e-5 * u.second / u.pixel
+#    @property
+#    def pixel_read_time(self):
+#        return 1e-5 * u.second / u.pixel
 
-    @property
-    def frame_time(self):
-        return np.product(self.subarray_size) * u.pixel * self.pixel_read_time
+#    @property
+#    def frame_time(self):
+#        return np.product(self.subarray_size) * u.pixel * self.pixel_read_time
 
-    @property
-    def dark(self):
-        return 1 * u.electron / u.second
+#    @property
+#    def dark(self):
+#        return 1 * u.electron / u.second
 
-    @property
-    def read_noise(self):
-        raise ValueError("Not Set")
+#    @property
+#    def read_noise(self):
+#        raise ValueError("Not Set")
 
-    @property
-    def saturation_limit(self):
-        raise ValueError("Not Set")
+#    @property
+#    def saturation_limit(self):
+#        raise ValueError("Not Set")
 
-    @property
-    def non_linearity(self):
-        raise ValueError("Not Set")
+#    @property
+#    def non_linearity(self):
+#        raise ValueError("Not Set")
 
     # @property
     # def frame_time(self):
@@ -103,56 +135,56 @@ class NIRDetector(Detector):
     #         * u.pixel
     #     ).to(u.second)
 
-    def qe(self, wavelength):
-        """
-        Calculate the quantum efficiency of the detector from the JWST NIRCam models.
+#    def qe(self, wavelength):
+#        """
+#        Calculate the quantum efficiency of the detector from the JWST NIRCam models.
 
-        Parameters:
-            wavelength (npt.NDArray): Wavelength in microns as `astropy.unit`
+#        Parameters:
+#            wavelength (npt.NDArray): Wavelength in microns as `astropy.unit`
 
-        Returns:
-            qe (npt.NDArray): Array of the quantum efficiency of the detector
+#        Returns:
+#            qe (npt.NDArray): Array of the quantum efficiency of the detector
 
-        """
-        if not hasattr(wavelength, "unit"):
-            raise ValueError("Pass a wavelength with units")
-        wavelength = np.atleast_1d(wavelength)
-        sw_coeffs = np.array([0.65830, -0.05668, 0.25580, -0.08350])
-        sw_exponential = 100.0
-        sw_wavecut_red = 1.65  # changed from 2.38 for Pandora
-        sw_wavecut_blue = 0.75  # new for Pandora
-        with np.errstate(invalid="ignore", over="ignore"):
-            sw_qe = (
-                sw_coeffs[0]
-                + sw_coeffs[1] * wavelength.to(u.micron).value
-                + sw_coeffs[2] * wavelength.to(u.micron).value ** 2
-                + sw_coeffs[3] * wavelength.to(u.micron).value ** 3
-            )
+#        """
+#        if not hasattr(wavelength, "unit"):
+#            raise ValueError("Pass a wavelength with units")
+#        wavelength = np.atleast_1d(wavelength)
+#        sw_coeffs = np.array([0.65830, -0.05668, 0.25580, -0.08350])
+#        sw_exponential = 100.0
+#        sw_wavecut_red = 1.65  # changed from 2.38 for Pandora
+#        sw_wavecut_blue = 0.75  # new for Pandora
+#        with np.errstate(invalid="ignore", over="ignore"):
+#            sw_qe = (
+#                sw_coeffs[0]
+#                + sw_coeffs[1] * wavelength.to(u.micron).value
+#                + sw_coeffs[2] * wavelength.to(u.micron).value ** 2
+#                + sw_coeffs[3] * wavelength.to(u.micron).value ** 3
+#            )
 
-            sw_qe = np.where(
-                wavelength.to(u.micron).value > sw_wavecut_red,
-                sw_qe
-                * np.exp(
-                    (sw_wavecut_red - wavelength.to(u.micron).value)
-                    * sw_exponential
-                ),
-                sw_qe,
-            )
+#            sw_qe = np.where(
+#                wavelength.to(u.micron).value > sw_wavecut_red,
+#                sw_qe
+#                * np.exp(
+#                    (sw_wavecut_red - wavelength.to(u.micron).value)
+#                    * sw_exponential
+#                ),
+#                sw_qe,
+#            )
 
-            sw_qe = np.where(
-                wavelength.to(u.micron).value < sw_wavecut_blue,
-                sw_qe
-                * np.exp(
-                    -(sw_wavecut_blue - wavelength.to(u.micron).value)
-                    * (sw_exponential / 1.5)
-                ),
-                sw_qe,
-            )
-        sw_qe[sw_qe < 1e-5] = 0
-        return sw_qe * u.DN / u.photon
+#            sw_qe = np.where(
+#                wavelength.to(u.micron).value < sw_wavecut_blue,
+#                sw_qe
+#                * np.exp(
+#                    -(sw_wavecut_blue - wavelength.to(u.micron).value)
+#                    * (sw_exponential / 1.5)
+#                ),
+#                sw_qe,
+#            )
+#        sw_qe[sw_qe < 1e-5] = 0
+#        return sw_qe * u.DN / u.photon
 
-    def throughput(self, wavelength):
-        return wavelength.value**0 * 0.61
+#    def throughput(self, wavelength):
+#        return wavelength.value**0 * 0.61
 
     # def wcs(self, target_ra, target_dec):
     #     # This is where we'd build or use a WCS.
@@ -207,6 +239,65 @@ class NIRDetector(Detector):
     #             else None,
     #         )
     #     return wcs
+
+    def world_to_pixel(self, ra, dec, distortion=True):
+        """Helper function.
+
+        This function ensures we keep the row-major convention in pandora-sim.
+        """
+        coords = np.vstack(
+            [
+                ra.to(u.deg).value if isinstance(ra, u.Quantity) else ra,
+                dec.to(u.deg).value if isinstance(dec, u.Quantity) else dec,
+            ]
+        ).T
+        if distortion:
+            column, row = self.wcs.all_world2pix(coords, 0).T
+        else:
+            column, row = self.wcs.wcs_world2pix(coords, 0).T
+        return np.vstack([row, column])
+
+    def pixel_to_world(self, row, column, distortion=True):
+        """Helper function.
+
+        This function ensures we keep the row-major convention in pandora-sat.
+        """
+        coords = np.vstack(
+            [
+                column.to(u.pixel).value
+                if isinstance(column, u.Quantity)
+                else column,
+                row.to(u.pixel).value if isinstance(row, u.Quantity) else row,
+            ]
+        ).T
+        if distortion:
+            return self.wcs.all_pix2world(coords, 0).T * u.deg
+        else:
+            return self.wcs.wcs_pix2world(coords, 0).T * u.deg
+
+    def wavelength_to_pixel(self, wavelength):
+        if not hasattr(nirda(), "_dispersion_df"):
+            raise ValueError("No wavelength dispersion information")
+        df = nirda()._dispersion_df
+        return np.interp(
+            wavelength,
+            np.asarray(df.Wavelength) * u.micron,
+            np.asarray(df.Pixel) * u.pixel,
+            left=np.nan,
+            right=np.nan,
+        )
+
+    def pixel_to_wavelength(self, pixel):
+        if not hasattr(nirda(), "_dispersion_df"):
+            raise ValueError("No wavelength dispersion information")
+        df = nirda()._dispersion_df
+        return np.interp(
+            pixel,
+            np.asarray(df.Pixel) * u.pixel,
+            np.asarray(df.Wavelength) * u.micron,
+            left=np.nan,
+            right=np.nan,
+        )
 
     def diagnose(
         self, n=4, npixels=20, image_type="psf", temperature=10 * u.deg_C
@@ -295,7 +386,7 @@ class NIRDetector(Detector):
         ar = np.zeros(self.subarray_size)
         yc, xc = target_center
 
-        sensitivity = self.sensitivity(wavelength)
+        sensitivity = nirda().sensitivity(wavelength)
 
         pix_edges = np.vstack([pix - dp / 2, pix + dp / 2]).T
         wav_edges = self.pixel_to_wavelength(pix_edges * u.pixel)
@@ -392,12 +483,12 @@ class NIRDetector(Detector):
             * u.electron
             / u.second
         )
-        traces *= self.frame_time
+        traces *= nirda().frame_time
         dark_noise = (
             np.asarray(
                 [
                     np.random.poisson(
-                        lam=(self.dark * self.frame_time * idx).value,
+                        lam=(nirda().dark * nirda().frame_time * idx).value,
                         size=self.subarray_size,
                     )
                     * u.electron
@@ -434,9 +525,9 @@ class NIRDetector(Detector):
         integration = frames[-4:].mean(axis=0) - frames[:4].mean(axis=0)
         return integration
 
-    def apply_gain(self, values: u.Quantity):
-        """Applies a single gain value"""
-        return values * 0.5 * u.electron / u.DN
+#    def apply_gain(self, values: u.Quantity):
+#        """Applies a single gain value"""
+#        return values * 0.5 * u.electron / u.DN
 
     def get_background_light_estimate(self, ra, dec, duration, shape=None):
         """Placeholder, will estimate the background light at different locations?
@@ -445,7 +536,7 @@ class NIRDetector(Detector):
         # This is an approximate value assuming a zodi of ~22 Vmag
         bkg_rate = 4 * u.electron / u.second
         if shape is None:
-            shape = self.shape
+            shape = nirda().shape
         bkg = u.Quantity(
             np.random.poisson(
                 lam=(bkg_rate * duration).to(u.electron).value, size=shape
@@ -695,10 +786,10 @@ class NIRDetector(Detector):
 
         Pass wav_edges to define the bounds of the integration"""
         spectrum = spec.to(u.erg / (u.micron * u.second * u.cm**2)).value
-        sensitivity = self.sensitivity(wav).value
+        sensitivity = nirda().sensitivity(wav).value
         wavelength = wav.to(u.micron).value
         unit_convert = (
-            1 * wav.unit * spec.unit * self.sensitivity(wav[0]).unit
+            1 * wav.unit * spec.unit * nirda().sensitivity(wav[0]).unit
         ).to(u.DN / u.second)
         integral = np.zeros(wav_edges.shape[0])
         for pdx in range(len(wav_edges)):
