@@ -48,14 +48,6 @@ class NIRDetector(nirda):
             transpose_psf: bool = False,
             ):
         self.ra, self.dec, self.theta, = (ra, dec, theta)
-        # self.naxis1 = nirda().naxis1
-        # self.naxis2 = nirda().naxis2
-        # self.pixel_scale = nirda().pixel_scale
-        # self.pixel_size = nirda().pixel_size
-        # self.frame_time = nirda().frame_time
-        # nirda = irdetector.NIRDetector()
-        # self.shape = nirda.shape
-        # self.sensitivity = nirda.sensitivity
 
         self.frame_dict = {"reset": 1, "read": 2, "drop": 4}
 
@@ -65,11 +57,7 @@ class NIRDetector(nirda):
             transpose=transpose_psf,
         )
         self.psf.blur(blur_value=(0.25 * u.pixel, 0.25 * u.pixel))
-#        self.flat = fits.open(
-#            np.sort(
-#                np.atleast_1d(glob(f"{PACKAGEDIR}/data/flatfield_NIRDA*.fits"))
-#            )[-1]
-#        )[1].data
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self.wcs = get_wcs(

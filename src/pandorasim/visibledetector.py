@@ -56,11 +56,6 @@ class VisibleDetector(visda):
         ).fix_dimension(temperature=self.psf.temperature0d)
         self.psf.blur(blur_value=(0.25 * u.pixel, 0.25 * u.pixel))
 
-#        self.flat = fits.open(
-#            np.sort(
-#                np.atleast_1d(glob(f"{PACKAGEDIR}/data/flatfield_VISDA*.fits"))
-#            )[-1]
-#        )[1].data
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self.wcs = get_wcs(
