@@ -23,7 +23,7 @@ from .utils import get_jitter
 from .wcs import get_wcs
 
 
-class NIRDetector():
+class NIRDetector(nirda):
     """
     Holds methods for simulating data from the NIR Detector on Pandora.
 
@@ -48,12 +48,16 @@ class NIRDetector():
             transpose_psf: bool = False,
             ):
         self.ra, self.dec, self.theta, = (ra, dec, theta)
-        self.naxis1 = nirda().naxis1
-        self.naxis2 = nirda().naxis2
-        self.pixel_scale = nirda().pixel_scale
-        self.pixel_size = nirda().pixel_size
+        # self.naxis1 = nirda().naxis1
+        # self.naxis2 = nirda().naxis2
+        # self.pixel_scale = nirda().pixel_scale
+        # self.pixel_size = nirda().pixel_size
+        # self.frame_time = nirda().frame_time
         # nirda = irdetector.NIRDetector()
         # self.shape = nirda.shape
+        # self.sensitivity = nirda.sensitivity
+
+        self.frame_dict = {"reset": 1, "read": 2, "drop": 4}
 
         """Some detector specific functions to run on initialization"""
         self.psf = PSF.from_file(
@@ -276,9 +280,9 @@ class NIRDetector():
             return self.wcs.wcs_pix2world(coords, 0).T * u.deg
 
     def wavelength_to_pixel(self, wavelength):
-        if not hasattr(nirda(), "_dispersion_df"):
+        if not hasattr(self, "_dispersion_df"):
             raise ValueError("No wavelength dispersion information")
-        df = nirda()._dispersion_df
+        df = self._dispersion_df
         return np.interp(
             wavelength,
             np.asarray(df.Wavelength) * u.micron,
@@ -288,9 +292,9 @@ class NIRDetector():
         )
 
     def pixel_to_wavelength(self, pixel):
-        if not hasattr(nirda(), "_dispersion_df"):
+        if not hasattr(self, "_dispersion_df"):
             raise ValueError("No wavelength dispersion information")
-        df = nirda()._dispersion_df
+        df = self._dispersion_df
         return np.interp(
             pixel,
             np.asarray(df.Pixel) * u.pixel,
@@ -386,7 +390,7 @@ class NIRDetector():
         ar = np.zeros(self.subarray_size)
         yc, xc = target_center
 
-        sensitivity = nirda().sensitivity(wavelength)
+        sensitivity = self.sensitivity(wavelength)
 
         pix_edges = np.vstack([pix - dp / 2, pix + dp / 2]).T
         wav_edges = self.pixel_to_wavelength(pix_edges * u.pixel)
@@ -483,12 +487,12 @@ class NIRDetector():
             * u.electron
             / u.second
         )
-        traces *= nirda().frame_time
+        traces *= self.frame_time
         dark_noise = (
             np.asarray(
                 [
                     np.random.poisson(
-                        lam=(nirda().dark * nirda().frame_time * idx).value,
+                        lam=(self.dark * self.frame_time * idx).value,
                         size=self.subarray_size,
                     )
                     * u.electron
@@ -536,7 +540,7 @@ class NIRDetector():
         # This is an approximate value assuming a zodi of ~22 Vmag
         bkg_rate = 4 * u.electron / u.second
         if shape is None:
-            shape = nirda().shape
+            shape = self.shape
         bkg = u.Quantity(
             np.random.poisson(
                 lam=(bkg_rate * duration).to(u.electron).value, size=shape
@@ -786,10 +790,10 @@ class NIRDetector():
 
         Pass wav_edges to define the bounds of the integration"""
         spectrum = spec.to(u.erg / (u.micron * u.second * u.cm**2)).value
-        sensitivity = nirda().sensitivity(wav).value
+        sensitivity = self.sensitivity(wav).value
         wavelength = wav.to(u.micron).value
         unit_convert = (
-            1 * wav.unit * spec.unit * nirda().sensitivity(wav[0]).unit
+            1 * wav.unit * spec.unit * self.sensitivity(wav[0]).unit
         ).to(u.DN / u.second)
         integral = np.zeros(wav_edges.shape[0])
         for pdx in range(len(wav_edges)):

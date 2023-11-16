@@ -833,7 +833,7 @@ class VisibleDetector(visda):
             nreads=nreads,
             nframes=len(self.time) // nreads,
             time_series_generators=time_series_generators,
-            freeze_dimensions=freeze_dimensions,
+            # freeze_dimensions=freeze_dimensions,
             quiet=True,
         )
         return time, f[:, apers[0]].sum(axis=1)
