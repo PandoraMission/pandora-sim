@@ -6,11 +6,9 @@ import pandas as pd
 from astropy.io import fits
 from astropy.wcs import WCS, Sip
 
-from .detector import Detector
-
 
 def get_wcs(
-    detector: Detector,
+    detector,
     target_ra: u.Quantity,
     target_dec: u.Quantity,
     crpix1: int = None,
@@ -73,7 +71,7 @@ def get_wcs(
     return wcs
 
 
-def read_distortion_file(detector: Detector, distortion_file: str):
+def read_distortion_file(detector, distortion_file: str):
     """Helper function to read a distortion file.
 
     This file must be a CSV file that contains a completely "square" grid of pixels
@@ -123,7 +121,7 @@ def read_distortion_file(detector: Detector, distortion_file: str):
 
 
 def _get_distorted_wcs(
-    detector: Detector, hdr: fits.Header, distortion_file: str, order: int = 3
+    detector, hdr: fits.Header, distortion_file: str, order: int = 3
 ):
     """Helper function to get the distorted WCS coefficients out of a distortion file.
 
