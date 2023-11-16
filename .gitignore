@@ -54,3 +54,6 @@ __pycache__/
 *.py[cod]
 *$py.class
 smex2024
+
+# VSC
+.vscode/
