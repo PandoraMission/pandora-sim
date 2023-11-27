@@ -89,149 +89,6 @@ class NIRDetector(nirda):
         )
         self.trace_range = [-200, 100]
 
-#    @property
-#    def _dispersion_df(self):
-#        return pd.read_csv(f"{PACKAGEDIR}/data/pixel_vs_wavelength.csv")
-
-#    @property
-#    def pixel_read_time(self):
-#        return 1e-5 * u.second / u.pixel
-
-#    @property
-#    def frame_time(self):
-#        return np.product(self.subarray_size) * u.pixel * self.pixel_read_time
-
-#    @property
-#    def dark(self):
-#        return 1 * u.electron / u.second
-
-#    @property
-#    def read_noise(self):
-#        raise ValueError("Not Set")
-
-#    @property
-#    def saturation_limit(self):
-#        raise ValueError("Not Set")
-
-#    @property
-#    def non_linearity(self):
-#        raise ValueError("Not Set")
-
-    # @property
-    # def frame_time(self):
-    #     return (
-    #         15
-    #         * u.microsecond
-    #         / u.pixel
-    #         * np.product(self.subarray_size)
-    #         * u.pixel
-    #     ).to(u.second)
-
-#    def qe(self, wavelength):
-#        """
-#        Calculate the quantum efficiency of the detector from the JWST NIRCam models.
-
-#        Parameters:
-#            wavelength (npt.NDArray): Wavelength in microns as `astropy.unit`
-
-#        Returns:
-#            qe (npt.NDArray): Array of the quantum efficiency of the detector
-
-#        """
-#        if not hasattr(wavelength, "unit"):
-#            raise ValueError("Pass a wavelength with units")
-#        wavelength = np.atleast_1d(wavelength)
-#        sw_coeffs = np.array([0.65830, -0.05668, 0.25580, -0.08350])
-#        sw_exponential = 100.0
-#        sw_wavecut_red = 1.65  # changed from 2.38 for Pandora
-#        sw_wavecut_blue = 0.75  # new for Pandora
-#        with np.errstate(invalid="ignore", over="ignore"):
-#            sw_qe = (
-#                sw_coeffs[0]
-#                + sw_coeffs[1] * wavelength.to(u.micron).value
-#                + sw_coeffs[2] * wavelength.to(u.micron).value ** 2
-#                + sw_coeffs[3] * wavelength.to(u.micron).value ** 3
-#            )
-
-#            sw_qe = np.where(
-#                wavelength.to(u.micron).value > sw_wavecut_red,
-#                sw_qe
-#                * np.exp(
-#                    (sw_wavecut_red - wavelength.to(u.micron).value)
-#                    * sw_exponential
-#                ),
-#                sw_qe,
-#            )
-
-#            sw_qe = np.where(
-#                wavelength.to(u.micron).value < sw_wavecut_blue,
-#                sw_qe
-#                * np.exp(
-#                    -(sw_wavecut_blue - wavelength.to(u.micron).value)
-#                    * (sw_exponential / 1.5)
-#                ),
-#                sw_qe,
-#            )
-#        sw_qe[sw_qe < 1e-5] = 0
-#        return sw_qe * u.DN / u.photon
-
-#    def throughput(self, wavelength):
-#        return wavelength.value**0 * 0.61
-
-    # def wcs(self, target_ra, target_dec):
-    #     # This is where we'd build or use a WCS.
-    #     # Here we're assuming no distortions, no rotations.
-    #     hdu = fits.PrimaryHDU()
-    #     hdu.header["CTYPE1"] = "RA---TAN"
-    #     hdu.header["CTYPE2"] = "DEC--TAN"
-    #     hdu.header["CRVAL1"] = target_ra
-    #     hdu.header["CRVAL2"] = target_dec
-    #     hdu.header["CRPIX1"] = 2048 - 1024 + 40  # + 0.5
-    #     hdu.header["CRPIX2"] = 2048  # - 0.5
-    #     hdu.header["NAXIS1"] = self.naxis1.value
-    #     hdu.header["NAXIS2"] = self.naxis2.value
-    #     hdu.header["CDELT1"] = -self.pixel_scale.to(u.deg / u.pixel).value
-    #     hdu.header["CDELT2"] = self.pixel_scale.to(u.deg / u.pixel).value
-    #     # We're not doing any rotation and scaling right now... but those go in PC1_1, PC1_2, PC1_2, PC2_2
-    #     with warnings.catch_warnings():
-    #         warnings.simplefilter("ignore")
-    #         wcs = WCS(hdu.header)
-    #     return wcs
-
-    # def wcs(
-    #     self,
-    #     target_ra: u.Quantity,
-    #     target_dec: u.Quantity,
-    #     theta: u.Quantity,
-    #     distortion: bool = True,
-    # ):
-    #     """Get the World Coordinate System for a detector
-
-    #     Parameters:
-    #     -----------
-    #     target_ra: astropy.units.Quantity
-    #         The target RA in degrees
-    #     target_dec: astropy.units.Quantity
-    #         The target Dec in degrees
-    #     theta: astropy.units.Quantity
-    #         The observatory angle in degrees
-    #     distortion_file: str
-    #         Optional file path to a distortion CSV file. See `wcs.read_distortion_file`
-    #     """
-    #     with warnings.catch_warnings():
-    #         warnings.simplefilter("ignore")
-    #         wcs = get_wcs(
-    #             self,
-    #             target_ra=target_ra,
-    #             target_dec=target_dec,
-    #             theta=theta,
-    #             crpix1=2048 - 40,
-    #             distortion_file=f"{PACKAGEDIR}/data/fov_distortion.csv"
-    #             if distortion
-    #             else None,
-    #         )
-    #     return wcs
-
     def world_to_pixel(self, ra, dec, distortion=True):
         """Helper function.
 
@@ -517,10 +374,6 @@ class NIRDetector(nirda):
         integration = frames[-4:].mean(axis=0) - frames[:4].mean(axis=0)
         return integration
 
-#    def apply_gain(self, values: u.Quantity):
-#        """Applies a single gain value"""
-#        return values * 0.5 * u.electron / u.DN
-
     def get_background_light_estimate(self, ra, dec, duration, shape=None):
         """Placeholder, will estimate the background light at different locations?
         Background in one integration...!
@@ -539,15 +392,24 @@ class NIRDetector(nirda):
         return bkg
 
     def get_trace_positions(self, ra, dec, pixel_resolution=2, plot=False):
-        """Finds the position of a trace, accounting for WCS distortions
+        """
+        Finds the position of a trace, accounting for WCS distortions.
 
         Parameters
         ----------
-
+        ra : float
+            Right Ascension of the target in decimal degrees.
+        dec : float
+            Declination of the target in decimal degrees.
+        pixel_resolution : int
+            Resolution of the pixel position sampling. The pixel positions are sampled as
+            1 / pixel_resoultion so higher values for pixel_resolution will result in higher
+            resolution.
 
         Returns
         -------
-
+        trace : array
+            Pixel positions of trace.
 
         """
 
@@ -619,9 +481,10 @@ class NIRDetector(nirda):
         temperature: u.Quantity = 10 * u.deg_C,
         sub_res: int = 3,
     ):
-        """Returns a function to evaluate the trace on the IR channel -FAST-
-
-        This trace will be fixed to the WCS solution at the given RA and Dec, but can be evaluated anywhere on the detector.
+        """
+        Returns a function to evaluate the trace on the IR channel -FAST-
+        This trace will be fixed to the WCS solution at the given RA and Dec,
+        but can be evaluated anywhere on the detector.
 
         Parameters
         ----------
@@ -774,9 +637,25 @@ class NIRDetector(nirda):
         return wav_edges, fasttrace
 
     def get_integrated_spectrum(self, wav, spec, wav_edges, plot=False):
-        """Given an input spectrum will get the integrated spectrum
+        """
+        Given an input spectrum will get the integrated spectrum. Pass wav_edges
+        to define the bounds of the integration.
 
-        Pass wav_edges to define the bounds of the integration"""
+        Parameters
+        ----------
+        wav : array
+            Wavelength values of the input spectrum
+        spec : array
+            Flux density of the input spectrum at each wavelength
+        wav_edges : array
+            A two-element array containing the minimum and maximum wavelengths to
+            integrate between.
+
+        Returns
+        -------
+        integral : float
+            Integrated flux density
+        """
         spectrum = spec.to(u.erg / (u.micron * u.second * u.cm**2)).value
         sensitivity = self.sensitivity(wav).value
         wavelength = wav.to(u.micron).value
@@ -809,21 +688,3 @@ class NIRDetector(nirda):
             )
         integral = integral * unit_convert
         return integral
-
-    # def get_sky_catalog(self, jmagnitude_range=(-3, 18)):
-    #     cat = get_sky_catalog(
-    #         self.ra,
-    #         self.dec,
-    #         columns="ra, dec, Teff, logg, jmag",
-    #         jmagnitude_range=jmagnitude_range,
-    #     )
-    #     cat[["nir_row", "nir_column"]] = self.world_to_pixel(cat.ra, cat.dec).T
-    #     r1 = cat.nir_row - self.subarray_corner[0]
-    #     c1 = cat.nir_column - self.subarray_corner[1]
-    #     k = (
-    #         (r1 > -self.trace_range[1])
-    #         & (r1 < (self.subarray_size[0] - self.trace_range[0]))
-    #         & (c1 > -5)
-    #         & (c1 < (self.subarray_size[1] + 5))
-    #     )
-    #     return cat[k].reset_index(drop=True)
