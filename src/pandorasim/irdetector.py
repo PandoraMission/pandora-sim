@@ -45,17 +45,21 @@ class NIRDetector(nirda):
             ra: u.Quantity,
             dec: u.Quantity,
             theta: u.Quantity,
-            SC_Resets1: int = 5,
-            SC_Resets2: int = 1,
-            SC_DropFrames1: int = 0,
-            SC_DropFrames2: int = 16,
-            SC_DropFrames3: int = 0,
-            SC_ReadFrames: int = 4,
-            SC_Groups: int = 2,
-            SC_Integrations: int = 5,
+            Resets1: int = 5,
+            Resets2: int = 1,
+            DropFrames1: int = 0,
+            DropFrames2: int = 16,
+            DropFrames3: int = 0,
+            ReadFrames: int = 4,
+            Groups: int = 2,
+            Integrations: int = 5,
             transpose_psf: bool = False,
             ):
         self.ra, self.dec, self.theta, = (ra, dec, theta)
+        (self.Resets1, self.Resets2, self.DropFrames1, self.DropFrames2, self.DropFrames3,
+         self.ReadFrames, self.Groups, self.Integrations) = (
+             Resets1, Resets2, DropFrames1, DropFrames2, DropFrames3, ReadFrames, Groups, Integrations,
+         )
 
         self.frame_dict = {"reset": 1, "read": 2, "drop": 4}
 
@@ -704,30 +708,30 @@ class NIRDetector(nirda):
 
         Parameters
         ----------
-        SC_Resets1 : int
+        Resets1 : int
             Number of reset frames at the start of the first integration of exposure
-        SC_Resets2 : int
+        Resets2 : int
             Number of resent frames at the start of 1 through n integrations of exposure
-        SC_DropFrames1 : int
+        DropFrames1 : int
             Number of dropped frames after reset of any integration of exposure
-        SC_DropFrames2 : int
+        DropFrames2 : int
             Number of dropped frames in every group of integrations of exposure except the last group
-        SC_DropFrames3 : int
+        DropFrames3 : int
             Number of dropped frames in the last group of each integration of exposure
-        SC_ReadFrames : int
+        ReadFrames : int
             Number of frames read during each group of integration of exposure
-        SC_Groups : int
+        Groups : int
             Number of groups per integration of exposure
-        SC_Integrations : int
+        Integrations : int
             Number of integrations per exposure
         """
         plot_integrations(
-            self.SC_Resets1,
-            self.SC_Resets2,
-            self.SC_DropFrames1,
-            self.SC_DropFrames2,
-            self.SC_DropFrames3,
-            self.SC_ReadFrames,
-            self.SC_Groups,
-            self.SC_Integrations,
+            self.Resets1,
+            self.Resets2,
+            self.DropFrames1,
+            self.DropFrames2,
+            self.DropFrames3,
+            self.ReadFrames,
+            self.Groups,
+            self.Integrations,
         )
