@@ -55,7 +55,6 @@ class PandoraSim(object):
             ra,
             dec,
             theta,
-            False,
         )
         self.VISDA = VisibleDetector(
             ra,
