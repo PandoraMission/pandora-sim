@@ -19,7 +19,7 @@ from pandorasat.irdetector import NIRDetector as nirda
 from . import PACKAGEDIR
 # from .detector import Detector
 from .psf import PSF, OutOfBoundsError
-from .utils import get_jitter
+from .utils import get_jitter, plot_integrations
 from .wcs import get_wcs
 
 
@@ -45,6 +45,14 @@ class NIRDetector(nirda):
             ra: u.Quantity,
             dec: u.Quantity,
             theta: u.Quantity,
+            SC_Resets1: int = 5,
+            SC_Resets2: int = 1,
+            SC_DropFrames1: int = 0,
+            SC_DropFrames2: int = 16,
+            SC_DropFrames3: int = 0,
+            SC_ReadFrames: int = 4,
+            SC_Groups: int = 2,
+            SC_Integrations: int = 5,
             transpose_psf: bool = False,
             ):
         self.ra, self.dec, self.theta, = (ra, dec, theta)
@@ -688,3 +696,38 @@ class NIRDetector(nirda):
             )
         integral = integral * unit_convert
         return integral
+
+    def plot_integrations(self):
+        """
+        Plot the integration scheme for the NIRDA under specified values describing the integration
+        strategy. Wraps utils.plot_integrations.
+
+        Parameters
+        ----------
+        SC_Resets1 : int
+            Number of reset frames at the start of the first integration of exposure
+        SC_Resets2 : int
+            Number of resent frames at the start of 1 through n integrations of exposure
+        SC_DropFrames1 : int
+            Number of dropped frames after reset of any integration of exposure
+        SC_DropFrames2 : int
+            Number of dropped frames in every group of integrations of exposure except the last group
+        SC_DropFrames3 : int
+            Number of dropped frames in the last group of each integration of exposure
+        SC_ReadFrames : int
+            Number of frames read during each group of integration of exposure
+        SC_Groups : int
+            Number of groups per integration of exposure
+        SC_Integrations : int
+            Number of integrations per exposure
+        """
+        plot_integrations(
+            self.SC_Resets1,
+            self.SC_Resets2,
+            self.SC_DropFrames1,
+            self.SC_DropFrames2,
+            self.SC_DropFrames3,
+            self.SC_ReadFrames,
+            self.SC_Groups,
+            self.SC_Integrations,
+        )
