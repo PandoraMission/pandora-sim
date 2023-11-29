@@ -19,7 +19,7 @@ from pandorasat.irdetector import NIRDetector as nirda
 from . import PACKAGEDIR
 # from .detector import Detector
 from .psf import PSF, OutOfBoundsError
-from .utils import get_jitter, plot_integrations
+from .utils import get_jitter
 from .wcs import get_wcs
 
 
@@ -45,21 +45,9 @@ class NIRDetector(nirda):
             ra: u.Quantity,
             dec: u.Quantity,
             theta: u.Quantity,
-            Resets1: int = 5,
-            Resets2: int = 1,
-            DropFrames1: int = 0,
-            DropFrames2: int = 16,
-            DropFrames3: int = 0,
-            ReadFrames: int = 4,
-            Groups: int = 2,
-            Integrations: int = 5,
             transpose_psf: bool = False,
             ):
         self.ra, self.dec, self.theta, = (ra, dec, theta)
-        (self.Resets1, self.Resets2, self.DropFrames1, self.DropFrames2, self.DropFrames3,
-         self.ReadFrames, self.Groups, self.Integrations) = (
-             Resets1, Resets2, DropFrames1, DropFrames2, DropFrames3, ReadFrames, Groups, Integrations,
-         )
 
         self.frame_dict = {"reset": 1, "read": 2, "drop": 4}
 
@@ -700,38 +688,3 @@ class NIRDetector(nirda):
             )
         integral = integral * unit_convert
         return integral
-
-    def plot_integrations(self):
-        """
-        Plot the integration scheme for the NIRDA under specified values describing the integration
-        strategy. Wraps utils.plot_integrations.
-
-        Parameters
-        ----------
-        Resets1 : int
-            Number of reset frames at the start of the first integration of exposure
-        Resets2 : int
-            Number of resent frames at the start of 1 through n integrations of exposure
-        DropFrames1 : int
-            Number of dropped frames after reset of any integration of exposure
-        DropFrames2 : int
-            Number of dropped frames in every group of integrations of exposure except the last group
-        DropFrames3 : int
-            Number of dropped frames in the last group of each integration of exposure
-        ReadFrames : int
-            Number of frames read during each group of integration of exposure
-        Groups : int
-            Number of groups per integration of exposure
-        Integrations : int
-            Number of integrations per exposure
-        """
-        plot_integrations(
-            self.Resets1,
-            self.Resets2,
-            self.DropFrames1,
-            self.DropFrames2,
-            self.DropFrames3,
-            self.ReadFrames,
-            self.Groups,
-            self.Integrations,
-        )
