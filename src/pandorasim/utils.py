@@ -639,7 +639,7 @@ def get_plot_vectors(inte):
     return np.hstack([y[:, None], cols])
 
 
-def plot_integrations(
+def plot_nirda_integrations(
     SC_Resets1,
     SC_Resets2,
     SC_DropFrames1,
