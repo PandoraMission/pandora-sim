@@ -760,7 +760,7 @@ class VisibleDetector(visda):
         )
         return time, f, apers
 
-    def plot_TPFs(self, nreads=50, include_noise=False, **kwargs):
+    def plot_TPFs(self, nreads=50, include_noise=False, max_subarrays=8, **kwargs):
         with plt.style.context(PANDORASTYLE):
             fig, ax = plt.subplots(
                 1, len(self.Catalogs), figsize=(len(self.Catalogs) * 2, 2)

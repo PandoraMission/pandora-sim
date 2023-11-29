@@ -117,6 +117,7 @@ class PandoraSim(object):
     def get_sky_catalog(
         self,
         distortion: bool = True,
+        **kwargs,
     ):
         """Gets the source catalog of an input target
 
@@ -124,6 +125,11 @@ class PandoraSim(object):
         ----------
         target_name : str
             Target name to obtain catalog for.
+        distortion : bool
+            Whether to apply a distortion to the WCS when mapping RA and Dec of catalog targets
+            to detector pixels. Default is True.
+        **kwargs
+            Additional arguments passed to the utils.get_sky_catalog function.
 
         Returns
         -------
@@ -150,7 +156,7 @@ class PandoraSim(object):
         # target_ra, target_dec = catalog_data[0][['ra', 'dec']].values()
 
         # Get location and magnitude data
-        cat = get_sky_catalog(self.ra, self.dec, radius=radius * u.deg)
+        cat = get_sky_catalog(self.ra, self.dec, radius=radius * u.deg, **kwargs)
 
         ra, dec, mag = cat["coords"].ra.deg, cat["coords"].dec.deg, cat["bmag"]
         vis_pix_coords = self.VISDA.world_to_pixel(
@@ -521,8 +527,18 @@ class PandoraSim(object):
         include_noise=True,
         figsize=(10, 8),
         subarrays=True,
+        # max_subarrays=8,
         **kwargs,
     ):
+        """
+        Method for plotting the simulated FFIs of the initialized target in the visible camera.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        """
         _, ffis = self.VISDA.get_FFIs(
             self.SkyCatalog,
             nreads=nreads,
