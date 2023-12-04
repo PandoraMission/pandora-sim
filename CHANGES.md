@@ -1,3 +1,8 @@
+# 0.5.0
+- Integration with new standalone pandora-sat package
+- Addition of the ability to plot a NIRDA integration scheme
+- Updated docstrings and cleaned unnecessary comments
+
 # 0.4.1
 - Renaming to PandoraSim, PandoraSat will be broken out
 
