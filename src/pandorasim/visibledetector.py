@@ -21,12 +21,10 @@ from .wcs import get_wcs
 
 
 class VisibleDetector(visda):
-    """
-    Holds methods for simulating data from the Visible Detector on Pandora.
+    """Holds methods for simulating data from the Visible Detector on Pandora.
 
     Attributes
     ----------
-
     ra: float
         Right Ascension of the pointing
     dec: float
@@ -82,28 +80,6 @@ class VisibleDetector(visda):
             r = (self.fieldstop_radius / self.pixel_scale).to(u.pix).value
             self.fieldstop = ~((np.abs(C) >= r) | (np.abs(R) >= r))
 
-        # # Blur our the PSF
-        # # We assume that there's low level jitter that "blurs" the PSF to some extent.
-        # s = self.psf.psf_flux.shape
-        # self.psf.psf_flux = np.asarray(
-        #     [
-        #         [
-        #             [
-        #                 [
-        #                     convolve(
-        #                         self.psf.psf_flux[:, :, idx, jdx, kdx, ldx],
-        #                         Gaussian2DKernel(1),
-        #                     )
-        #                     for idx in range(s[2])
-        #                 ]
-        #                 for jdx in range(s[3])
-        #             ]
-        #             for kdx in range(s[4])
-        #         ]
-        #         for ldx in range(s[5])
-        #     ]
-        # ).transpose([4, 5, 3, 2, 1, 0])
-
         # ROW COLUMN JUST LIKE PYTHON
         self.subarray_size = (50, 51)
         # COLUMN, ROW
@@ -120,57 +96,23 @@ class VisibleDetector(visda):
             * self.integration_time
         ).value
 
-#    @property
-#    def _dispersion_df(self):
-#        return pd.read_csv(f"{PACKAGEDIR}/data/pixel_vs_wavelength_vis.csv")
-
-#    def qe(self, wavelength):
-#        """
-#        Calculate the quantum efficiency of the detector.
-
-#        Parameters:
-#            wavelength (npt.NDArray): Wavelength in microns as `astropy.unit`
-
-#        Returns:
-#            qe (npt.NDArray): Array of the quantum efficiency of the detector
-#        """
-#        df = pd.read_csv(f"{PACKAGEDIR}/data/pandora_visible_qe.csv")
-#        wav, transmission = np.asarray(df.Wavelength) * u.angstrom, np.asarray(
-#            df.Transmission
-#        )
-#        return (
-#            np.interp(wavelength, wav, transmission, left=0, right=0)
-#            * u.DN
-#            / u.photon
-#        )
-
-#    @property
-#    def dark(self):
-#        return 1 * u.electron / u.second
-
-#    @property
-#    def read_noise(self):
-#        return 1.5 * u.electron
-
-#    @property
-#    def bias(self):
-#        return 100 * u.electron
-
-#    @property
-#    def integration_time(self):
-#        return 0.2 * u.second
-
-#    @property
-#    def fieldstop_radius(self):
-#        return 0.3 * u.deg
-
-#    def throughput(self, wavelength):
-#        return wavelength.value**0 * 0.714
-
     def world_to_pixel(self, ra, dec, distortion=True):
-        """Helper function.
+        """Helper function. This function ensures we keep the row-major convention in pandora-sim.
 
-        This function ensures we keep the row-major convention in pandora-sim.
+        Parameters
+        ----------
+        ra : float
+            Right Ascension to be converted to pixel position.
+        dec : float
+            Declination to be converted to pixel position.
+        distortion : bool
+            Flag whether to account for the distortion in the WCS when converting from RA/Dec
+            to pixel position. Default is True.
+
+        Returns
+        -------
+        np.ndarray
+            Row and column positions of each provided RA and Dec.
         """
         coords = np.vstack(
             [
@@ -185,9 +127,22 @@ class VisibleDetector(visda):
         return np.vstack([row, column])
 
     def pixel_to_world(self, row, column, distortion=True):
-        """Helper function.
+        """Helper function. This function ensures we keep the row-major convention in pandora-sim.
 
-        This function ensures we keep the row-major convention in pandora-sat.
+        Parameters
+        ----------
+        row : float
+            Pixel row position to be converted to sky coordinates.
+        column : float
+            Pixel column position to be converted to sky coordinates.
+        distortion : bool
+            Flag whether to account for the distortion in the WCS when converting from pixel position
+            to sky coordinates. Default is True.
+
+        Returns
+        -------
+        np.ndarray
+            RA and Dec of input pixel positions.
         """
         coords = np.vstack(
             [
@@ -202,36 +157,30 @@ class VisibleDetector(visda):
         else:
             return self.wcs.wcs_pix2world(coords, 0).T * u.deg
 
-    def wavelength_to_pixel(self, wavelength):
-        if not hasattr(self, "_dispersion_df"):
-            raise ValueError("No wavelength dispersion information")
-        df = self.det._dispersion_df
-        return np.interp(
-            wavelength,
-            np.asarray(df.Wavelength) * u.micron,
-            np.asarray(df.Pixel) * u.pixel,
-            left=np.nan,
-            right=np.nan,
-        )
-
-    def pixel_to_wavelength(self, pixel):
-        if not hasattr(self, "_dispersion_df"):
-            raise ValueError("No wavelength dispersion information")
-        df = self.det._dispersion_df
-        return np.interp(
-            pixel,
-            np.asarray(df.Pixel) * u.pixel,
-            np.asarray(df.Wavelength) * u.micron,
-            left=np.nan,
-            right=np.nan,
-        )
-
     def diagnose(
         self,
         n=3,
         image_type="PSF",
         freeze_dictionary={},
     ):
+        """Plots diagnostic plots of the VISDA PSF and PRF as they appear on the detector across
+        multiple spatial positions.
+
+        Parameters
+        ----------
+        n : int
+            Determines number of subplots (and therefore number of positions to sample) will be
+            plotted. n x n plots will be plotted in a square arrangement surrounding the center
+            of the detector. Default is 3.
+        image_type : str
+            Specifies whether the PSF or PRF will be plotted. Options are 'psf' or 'prf'. Default
+            is 'psf'.
+
+        Returns
+        -------
+        fig : plt.figure
+            The output figure.
+        """
         if not (n % 2) == 1:
             n += 1
         fig, ax = plt.subplots(n, n, figsize=(n * 2, n * 2))
@@ -277,39 +226,6 @@ class VisibleDetector(visda):
         ax[n - 1, n // 2].set(xlabel="X Pixel")
         ax[0, n // 2].set(title=image_type.upper())
         return fig
-
-    # def wcs(
-    #     self,
-    #     target_ra: u.Quantity,
-    #     target_dec: u.Quantity,
-    #     theta: u.Quantity,
-    #     distortion: bool = True,
-    # ):
-    #     """Get the World Coordinate System for a detector
-
-    #     Parameters:
-    #     -----------
-    #     target_ra: astropy.units.Quantity
-    #         The target RA in degrees
-    #     target_dec: astropy.units.Quantity
-    #         The target Dec in degrees
-    #     theta: astropy.units.Quantity
-    #         The observatory angle in degrees
-    #     distortion_file: str
-    #         Optional file path to a distortion CSV file. See `wcs.read_distortion_file`
-    #     """
-    #     with warnings.catch_warnings():
-    #         warnings.simplefilter("ignore")
-    #         wcs = get_wcs(
-    #             self,
-    #             target_ra=target_ra,
-    #             target_dec=target_dec,
-    #             theta=theta,
-    #             distortion_file=f"{PACKAGEDIR}/data/fov_distortion.csv"
-    #             if distortion
-    #             else None,
-    #         )
-    #     return wcs
 
     def get_fastPRF(self, wavelength, temperature, res=7, sub_res=5):
         """Returns a function which will evaluate the PRF on a grid, fast.
@@ -455,32 +371,10 @@ class VisibleDetector(visda):
 
         return bkg
 
-#    def apply_gain(self, values: u.Quantity):
-#        """Applies a piecewise gain function"""
-#        x = np.atleast_1d(values)
-#        masks = np.asarray(
-#            [
-#                (x >= 0 * u.DN) & (x < 1e3 * u.DN),
-#                (x >= 1e3 * u.DN) & (x < 5e3 * u.DN),
-#                (x >= 5e3 * u.DN) & (x < 2.8e4 * u.DN),
-#                (x >= 2.8e4 * u.DN),
-#            ]
-#        )
-#        gain = np.asarray([0.52, 0.6, 0.61, 0.67]) * u.electron / u.DN
-#        if values.ndim == 1:
-#            gain = gain[:, None]
-#        if values.ndim == 2:
-#            gain = gain[:, None, None]
-#        return u.Quantity(
-#            (masks * x[None, :] * gain).sum(axis=0), dtype=int, unit=u.electron
-#        )
-
     def prf(
         self,
         row=1024,
         col=1024,
-        #        wavelength=None,
-        #        temperature=None,
         shape=None,
         corner=(1004, 1004),
         # freeze_dimensions=[2, 3],
@@ -494,8 +388,6 @@ class VisibleDetector(visda):
         point = (
             row - self.shape[0] // 2,
             col - self.shape[1] // 2,
-            #            wavelength,
-            #            temperature,
         )
         dr, dc = 0, 0
         if point[0] > self.psf.row1d[-1].value:
@@ -538,13 +430,37 @@ class VisibleDetector(visda):
         nreads: int,
         include_noise=True,
         include_cosmics=True,
-        #        wavelength=None,
-        #        temperature=None,
         #        freeze_dimensions=[2, 3],
         jitter=None,
         quiet=True,
     ):
-        """Get Full Frame Images"""
+        """Get Full Frame Images
+
+        Parameters
+        ----------
+        catalog : pd.DataFrame
+            Sky catalog of nearby sources around the target.
+        nframes : int
+            Number of frames to coadd in the FFI.
+        nreads : int
+            Number of reads of the detector in each frame.
+        include_noise : bool
+            Flag determining whether noise is included in the FFI. Default is True.
+        include_cosmics : bool
+            Flag determining whether cosmic rays are included in the FFI. Default is
+            True.
+        jitter : object
+            Jitter in the observation. WIP.
+        quiet : bool
+            Flag to determine if tqdm is quiet while this function runs.
+
+        Returns
+        -------
+        time : np.ndarray
+            Times at which the observations occurs.
+        science_image : np.ndarray
+            Array containing pixel values for the simulated FFI across VISDA.
+        """
         shape = self.shape
         catalog = catalog[
             (catalog.vis_column > 0)
@@ -688,6 +604,37 @@ class VisibleDetector(visda):
         time_series_generators=None,
         include_noise=True,
     ):
+        """Gets the time, flux, and subarrays for the bright sources nearby the target
+        on the FFI.
+
+        Parameters
+        ----------
+        cat : pd.DataFrame
+            Catalog of nearby sources.
+        corner : np.ndarray
+            Corners of the subarrays in VISDA pixel coordinates.
+        nreads : int
+            Number of reads of the detector for the observation. Default is 50.
+        nframes : int
+            Number of frames to coadd in the integration. Default is 10.
+        quiet : bool
+            Flag determining whether tqdm is quiet while this function runs. Default is
+            True.
+        time_series_generators : function or None.
+            Function governing the generation of the time series from the subarray.
+            Default is None.
+        include_noise : bool
+            Flag determining whether noise is simulated and included. Default is True.
+
+        Returns
+        -------
+        time : np.ndarray
+            Time stamps of the observation.
+        f : np.ndarray
+            Flux values from the subarrays centered on each source.
+        apers : np.ndarray
+            Apertures of each subarray in VISDA pixel coordinates.
+        """
         f = np.zeros((nframes, *self.subarray_size), dtype=int)
         time = self.time[: nreads * nframes]
         time = np.asarray([time[idx::nreads] for idx in range(nreads)]).mean(
@@ -761,6 +708,25 @@ class VisibleDetector(visda):
         return time, f, apers
 
     def plot_TPFs(self, nreads=50, include_noise=False, max_subarrays=8, **kwargs):
+        """Plots the Target Pixel Files (TPFs) generated by each subarray.
+
+        Parameters
+        ----------
+        nreads : int
+            Number of detector reads to be used in generating each TPF. Default is 50.
+        include_noise : bool
+            Flag determining whether noise is simulated in the TPFs. Default is True.
+        max_subarrays : int
+            Currently WIP. Specifies number of nearby subarrays to make TPFs for. Sources
+            are chosen in order of descending visible brightness. Default is 8.
+        **kwargs
+            Additional arguments to be passed to the plt.imshow command.
+
+        Returns
+        -------
+        fig : plt.figure
+            Output figure containing the TPF plots.
+        """
         with plt.style.context(PANDORASTYLE):
             fig, ax = plt.subplots(
                 1, len(self.Catalogs), figsize=(len(self.Catalogs) * 2, 2)
@@ -799,6 +765,7 @@ class VisibleDetector(visda):
         corner=(0, 0),
         shape=None,  # , freeze_dimensions=[2, 3]
     ):
+        """Get the aperture for a subarray."""
         if shape is None:
             shape = self.subarray_size
         aper = np.zeros(shape)
@@ -815,8 +782,28 @@ class VisibleDetector(visda):
         return aper > 0.005
 
     def get_target_timeseries(
-        self, ts_func=None, nreads=50, subarray=0, freeze_dimensions=[2, 3]
+        self, ts_func=None, nreads=50, subarray=0  # , freeze_dimensions=[2, 3]
     ):
+        """Get the timeseries for a target in a subarray.
+
+        Parameters
+        ----------
+        ts_func : function or None
+            Function governing the generation of the time series. Default is None.
+        nreads : int
+            Number of detector reads to include in each time series data point.
+            Default is 50.
+        subarray : int
+            Index of the subarray to use in the generation of the time series. Default
+            is 0.
+
+        Returns
+        -------
+        time : np.ndarray
+            Time stamps of time series for each subarray.
+        f : np.ndarray
+            Flux values of time series for each subarray.
+        """
         cat = self.Catalogs[subarray]
         corner = self.corners[subarray]
         time_series_generators = np.hstack(

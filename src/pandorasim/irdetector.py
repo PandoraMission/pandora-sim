@@ -2,30 +2,24 @@
 
 # Standard library
 import warnings
-# from glob import glob
 
 # Third-party
 import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
-# import pandas as pd
-# from astropy.io import fits
 from matplotlib.patches import Rectangle
 from tqdm import tqdm
 
 from pandorasat.irdetector import NIRDetector as nirda
-# from pandorasat import irdetector
 
 from . import PACKAGEDIR
-# from .detector import Detector
 from .psf import PSF, OutOfBoundsError
 from .utils import get_jitter
 from .wcs import get_wcs
 
 
 class NIRDetector(nirda):
-    """
-    Holds methods for simulating data from the NIR Detector on Pandora.
+    """Holds methods for simulating data from the NIR Detector on Pandora.
 
     Attributes
     ----------
@@ -90,9 +84,22 @@ class NIRDetector(nirda):
         self.trace_range = [-200, 100]
 
     def world_to_pixel(self, ra, dec, distortion=True):
-        """Helper function.
+        """Helper function. This function ensures we keep the row-major convention in pandora-sim.
 
-        This function ensures we keep the row-major convention in pandora-sim.
+        Parameters
+        ----------
+        ra : float
+            Right Ascension to be converted to pixel position.
+        dec : float
+            Declination to be converted to pixel position.
+        distortion : bool
+            Flag whether to account for the distortion in the WCS when converting from RA/Dec
+            to pixel position. Default is True.
+
+        Returns
+        -------
+        np.ndarray
+            Row and column positions of each provided RA and Dec.
         """
         coords = np.vstack(
             [
@@ -107,9 +114,22 @@ class NIRDetector(nirda):
         return np.vstack([row, column])
 
     def pixel_to_world(self, row, column, distortion=True):
-        """Helper function.
+        """Helper function. This function ensures we keep the row-major convention in pandora-sim.
 
-        This function ensures we keep the row-major convention in pandora-sat.
+        Parameters
+        ----------
+        row : float
+            Pixel row position to be converted to sky coordinates.
+        column : float
+            Pixel column position to be converted to sky coordinates.
+        distortion : bool
+            Flag whether to account for the distortion in the WCS when converting from pixel position
+            to sky coordinates. Default is True.
+
+        Returns
+        -------
+        np.ndarray
+            RA and Dec of input pixel positions.
         """
         coords = np.vstack(
             [
@@ -125,6 +145,18 @@ class NIRDetector(nirda):
             return self.wcs.wcs_pix2world(coords, 0).T * u.deg
 
     def wavelength_to_pixel(self, wavelength):
+        """Provides position on the NIRDA that a given wavelength will be dispersed to.
+
+        Parameters
+        ----------
+        wavelength : np.ndarray
+            Wavelengths to be converted in microns.
+
+        Returns
+        -------
+        pixel : np.ndarray
+            Pixel position that wavelengths are dispersed to on NIRDA.
+        """
         if not hasattr(self, "_dispersion_df"):
             raise ValueError("No wavelength dispersion information")
         df = self._dispersion_df
@@ -137,6 +169,18 @@ class NIRDetector(nirda):
         )
 
     def pixel_to_wavelength(self, pixel):
+        """Provides the wavelength that is dispersed to a given pixel position on NIRDA.
+
+        Parameters
+        ----------
+        pixel : np.ndarray
+            Pixel positions.
+
+        Returns
+        -------
+        wavelength : float or np.nadarray
+            Wavelengths dispersed to the given NIRDA pixels.
+        """
         if not hasattr(self, "_dispersion_df"):
             raise ValueError("No wavelength dispersion information")
         df = self._dispersion_df
@@ -151,6 +195,28 @@ class NIRDetector(nirda):
     def diagnose(
         self, n=4, npixels=20, image_type="psf", temperature=10 * u.deg_C
     ):
+        """Plots diagnostic plots of the NIRDA PSF and PRF as they appear on the detector across
+        multiple wavelengths.
+
+        Parameters
+        ----------
+        n : int
+            Determines number of subplots (and therefore number of wavelengths to sample) will be
+            plotted. n x n plots will be plotted in a square arrangement. Default is 4.
+        npixels : int
+            Number of pixels to plot in each subplot. Each subplot will be npixels x npixels.
+            Default is 20.
+        image_type : str
+            Specifies whether the PSF or PRF will be plotted. Options are 'psf' or 'prf'. Default
+            is 'psf'.
+        temperature : float
+            Temperature of the detector in degrees Celsius. Default is 10.
+
+        Returns
+        -------
+        fig : plt.figure
+            The output figure.
+        """
         wavs = np.linspace(
             self.psf.wavelength1d.min(), self.psf.wavelength1d.max(), n**2
         )
@@ -216,13 +282,22 @@ class NIRDetector(nirda):
 
         Parameters
         ----------
-        target: ps.target.Target
-            A target with the method to get an SED as a function of wavelength
-        pixel_resolution: float
-            The number of subpixels to use when building the trace.
-            Higher numbers will take longer to calculate.
-        target_center: tuple
-            Center of the target within the subarray.
+        wavelength : np.ndarray
+            Wavelengths to get trace for.
+        spectrum : np.ndarray
+            Flux values at each wavelength value.
+        pixel_resolution : float
+            The number of subpixels to use when building the trace. Higher numbers will
+            take longer to calculate. Default is 2.
+        target_center : tuple
+            Center of the target within the subarray. Default is (250, 40).
+        temperature : u.Quantity
+            Temperature of the detector in Celsius. Default is -10.
+
+        Returns
+        -------
+        trace : np.ndarray
+            Counts values across NIRDA.
         """
         dp = 1 / pixel_resolution
         pix = np.arange(-200, 100, dp) + dp / 2
@@ -302,15 +377,30 @@ class NIRDetector(nirda):
         temperature=-10 * u.deg_C,
         seed=None,
     ):
-        """Calculates the frames  from a source in a subarray
+        """Calculates the frames from a source in a subarray.
 
         Parameters
         ----------
-        pixel_resolution: float
-            The number of subpixels to use when building the trace.
-            Higher numbers will take longer to calculate.
+        wavelength : np.ndarray
+            Wavelengths of the target that the frames will be evaluated at.
+        spectrum : np.ndarray
+            Flux of the target at the wavelengths specified.
+        nframes : int
+            Number of frames to be coadded Default is 20.
         target_center: tuple
-            Center of the target within the subarray.
+            Center of the target within the subarray. Default is (40, 250).
+        pixel_resolution: float
+            The number of subpixels to use when building the trace. Higher numbers
+            will take longer to calculate. Default is 2
+        temperature : u.Quantity
+            Temperature of the detector in Celsius. Default is -10.
+        seed : int or None
+            Seed value to be passed tot the get_jitter function.
+
+        Returns
+        -------
+        traces : np.ndarray
+            Coadded frame of NIRDA observations of the target.
         """
         x1, y1 = np.asarray(get_jitter(nframes=nframes, seed=seed))
         traces = (
@@ -358,6 +448,32 @@ class NIRDetector(nirda):
         temperature=-10 * u.deg_C,
         seed=None,
     ):
+        """Integrates the frames of a simulated NIRDA observation and performs
+        Fowler sampling on them.
+
+        Parameters
+        ----------
+        wavelength : np.ndarray
+            Wavelengths of the target that the frames will be evaluated at.
+        spectrum : np.ndarray
+            Flux of the target at the wavelengths specified.
+        nframes : int
+            Number of frames used to generate the integration.
+        target_center: tuple
+            Center of the target within the subarray. Default is (40, 250).
+        pixel_resolution: float
+            The number of subpixels to use when building the trace. Higher numbers
+            will take longer to calculate. Default is 2
+        temperature : u.Quantity
+            Temperature of the detector in Celsius. Default is -10.
+        seed : int or None
+            Seed value to be passed tot the get_jitter function.
+
+        Returns
+        -------
+        integration : np.ndarray
+            Fowler-sampled integration of NIRDA frames.
+        """
         if nframes < 8:
             raise ValueError("Too few frames to do Fowler sampling.")
         frames = self.get_frames(
@@ -392,8 +508,7 @@ class NIRDetector(nirda):
         return bkg
 
     def get_trace_positions(self, ra, dec, pixel_resolution=2, plot=False):
-        """
-        Finds the position of a trace, accounting for WCS distortions.
+        """Finds the position of a trace, accounting for WCS distortions.
 
         Parameters
         ----------
@@ -481,8 +596,7 @@ class NIRDetector(nirda):
         temperature: u.Quantity = 10 * u.deg_C,
         sub_res: int = 3,
     ):
-        """
-        Returns a function to evaluate the trace on the IR channel -FAST-
+        """Returns a function to evaluate the trace on the IR channel -FAST-
         This trace will be fixed to the WCS solution at the given RA and Dec,
         but can be evaluated anywhere on the detector.
 
@@ -494,11 +608,13 @@ class NIRDetector(nirda):
         dec: astropy.units.Quantity
             The Declination to build the WCS solution at in degrees
         npix: int
-            The number of PRFs to evaluate per pixel. Higher numbers are slower, but more accurate.
+            The number of PRFs to evaluate per pixel. Higher numbers are slower, but more
+            accurate.
         temperature: astropy.units.Quantity
             Temperature to use for the PRF in degrees C
         sub_res: int
-            The number of sub-pixel resolution elements in the returned PRF model. Higher numbers are slower, but more accurate.
+            The number of sub-pixel resolution elements in the returned PRF model. Higher
+            numbers are slower, but more accurate.
 
         Returns
         -------
@@ -637,19 +753,20 @@ class NIRDetector(nirda):
         return wav_edges, fasttrace
 
     def get_integrated_spectrum(self, wav, spec, wav_edges, plot=False):
-        """
-        Given an input spectrum will get the integrated spectrum. Pass wav_edges
+        """Given an input spectrum will get the integrated spectrum. Pass wav_edges
         to define the bounds of the integration.
 
         Parameters
         ----------
-        wav : array
+        wav : np.ndarray
             Wavelength values of the input spectrum
-        spec : array
+        spec : np.ndarray
             Flux density of the input spectrum at each wavelength
-        wav_edges : array
+        wav_edges : np.ndarray
             A two-element array containing the minimum and maximum wavelengths to
             integrate between.
+        plot : bool
+            Flag to specify whether to plot the integrated spectrum. Default is False.
 
         Returns
         -------

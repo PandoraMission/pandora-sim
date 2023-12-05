@@ -24,9 +24,26 @@ from .visibledetector import VisibleDetector
 class PandoraSim(object):
     """Holds methods for simulating Pandora data.
 
-    Args:
-        NIRDA (IRDetector): Class of the NIRDA properties
-        VISDA (IRDetector): Class of the VISDA properties
+    Attributes
+    ----------
+    ra : u.Quantity
+        Right Ascension of the target.
+    dec : u.Quantity
+        Declination of the target.
+    theta : u.Quantity
+        Roll angle of the observatory.
+    obstime : Time
+        Time of observation. Default is Time.now().
+    duration : u.Quantity
+        Observation duration. Default is 60 minutes.
+    rowjitter_1sigma : u.Quantity
+        1 sigma jitter in the pixel row direction. Default is 0.2 pixels.
+    coljitter_1sigma : u.Quantity
+        1 sigma jitter in the pixel column direction. Default is 0.2 pixels.
+    thetajitter_1sigma : u.Quantity
+        1 sigma jitter in the spacecraft roll. Default is 0.0005 degrees.
+    jitter_timescale : u.Quantity
+        Timescale on which jitter occurs. Default is 60 seconds.
     """
 
     def __init__(
@@ -115,9 +132,8 @@ class PandoraSim(object):
         self,
         distortion: bool = True,
         **kwargs,
-    ):
-        """
-        Gets the source catalog of an input target
+    ) -> pd.DataFrame:
+        """Gets the source catalog of an input target
 
         Parameters
         ----------
@@ -239,13 +255,12 @@ class PandoraSim(object):
         )
         return source_catalog
 
-    def get_nirda_stars(self):
-        """
-        Gets all of the stars contained within the NIR detector for the given pointing.
+    def get_nirda_stars(self) -> pd.DataFrame:
+        """Gets all of the stars contained within the NIR detector for the given pointing.
 
         Returns
         -------
-        cat : pandas.DataFrame
+        cat : pd.DataFrame
             Catalog of stars contained within the NIR detector for the given pointing.
         """
         cat = self.SkyCatalog.copy()
@@ -263,8 +278,7 @@ class PandoraSim(object):
         return cat[k].reset_index(drop=True)
 
     def get_vis_stars(self):
-        """
-        Gets all of the stars contained within the visible detector for the given pointing.
+        """Gets all of the stars contained within the visible detector for the given pointing.
 
         Returns
         -------
@@ -339,8 +353,7 @@ class PandoraSim(object):
         return corners, minicats
 
     def plot_footprint(self, ax=None) -> plt.axis:
-        """
-        Plots the footprint of VISDA and NIRDA at the given pointing.
+        """Plots the footprint of VISDA and NIRDA at the given pointing.
 
         Parameters
         ----------
@@ -410,8 +423,7 @@ class PandoraSim(object):
         # max_subarrays=8,
         **kwargs,
     ) -> plt.figure:
-        """
-        Plots the simulated FFIs of the initialized target in the visible camera.
+        """Plots the simulated FFIs of the initialized target in the visible camera.
 
         Parameters
         ----------
