@@ -193,7 +193,7 @@ class NIRDetector(nirda):
         )
 
     def diagnose(
-        self, n=4, npixels=20, image_type="psf", temperature=10 * u.deg_C
+        self, n=4, npixels=20, image_type="psf", temperature=-10 * u.deg_C
     ):
         """Plots diagnostic plots of the NIRDA PSF and PRF as they appear on the detector across
         multiple wavelengths.
