@@ -441,9 +441,9 @@ class VisibleDetector(visda):
         catalog : pd.DataFrame
             Sky catalog of nearby sources around the target.
         nframes : int
-            Number of frames to coadd in the FFI.
+            Number of FFI frames to generate.
         nreads : int
-            Number of reads of the detector in each frame.
+            Number of reads of the detector to coadd in each frame.
         include_noise : bool
             Flag determining whether noise is included in the FFI. Default is True.
         include_cosmics : bool
@@ -591,6 +591,7 @@ class VisibleDetector(visda):
         time = np.asarray([time[idx::nreads] for idx in range(nreads)]).mean(
             axis=0
         )
+        self.ffis = science_image
         return time, science_image
 
     def get_subarray(
