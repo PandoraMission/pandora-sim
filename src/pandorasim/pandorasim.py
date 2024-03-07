@@ -11,13 +11,14 @@ import pandas as pd
 from astropy.time import Time
 from matplotlib.patches import PathPatch
 from matplotlib.path import Path
+from astropy.table import Table
 
 from pandorasat.hardware import Hardware
 from pandorasat.orbit import Orbit
 
-from . import PANDORASTYLE
+from . import PANDORASTYLE, __version__
 from .irdetector import NIRDetector
-from .utils import get_jitter, get_sky_catalog
+from .utils import get_jitter, get_sky_catalog, save_to_FITS
 from .visibledetector import VisibleDetector
 
 
@@ -413,6 +414,45 @@ class PandoraSim(object):
             )
         return ax
 
+    def get_FFIs(
+        self,
+        nframes: int = 1,
+        nreads: int = 10,
+        include_cosmics: bool = False,
+        include_noise: bool = True,
+        make_subarrays: bool = True,
+        **kwargs,
+    ):
+        """Wrapper function for VISDA.get_FFIs to allow user access at the `PandoraSim` class level"""
+        self.ffi_nframes = nframes
+        self.ffi_nreads = nreads
+
+        _, self.ffis = self.VISDA.get_FFIs(
+            self.SkyCatalog,
+            nframes=nframes,
+            nreads=nreads,
+            include_cosmics=include_cosmics,
+            include_noise=include_noise,
+            **kwargs,
+        )
+
+        if make_subarrays:
+            subarrays = []
+
+            for idx in range(len(self.VISDA.Catalogs)):
+                _, f, _ = self.VISDA.get_subarray(
+                    self.VISDA.Catalogs[idx],
+                    self.VISDA.corners[idx],
+                    nreads=nreads,
+                    nframes=nframes,
+                    quiet=True,
+                    include_noise=include_noise,
+                )
+
+                subarrays.append(f)
+
+            self.subarrays = np.array(subarrays)
+
     def plot_FFI(
         self,
         nreads: int = 10,
@@ -420,7 +460,7 @@ class PandoraSim(object):
         include_noise: bool = True,
         figsize: tuple = (10, 8),
         subarrays: bool = True,
-        # max_subarrays=8,
+        max_subarrays=8,
         **kwargs,
     ) -> plt.figure:
         """Plots the simulated FFIs of the initialized target in the visible camera.
@@ -448,21 +488,24 @@ class PandoraSim(object):
         fig : matplotlib.pyplot.figure
             Output figure of the visible detector.
         """
-        _, ffis = self.VISDA.get_FFIs(
-            self.SkyCatalog,
-            nreads=nreads,
-            nframes=1,
-            include_cosmics=include_cosmics,
-            include_noise=include_noise,
-            #            freeze_dimensions=freeze_dimensions,
-        )
+        if not hasattr(self, "ffis"):
+            # _, self.ffis = self.VISDA.get_FFIs(
+            #     self.SkyCatalog,
+            #     nreads=nreads,
+            #     nframes=1,
+            #     include_cosmics=include_cosmics,
+            #     include_noise=include_noise,
+            #     #            freeze_dimensions=freeze_dimensions,
+            # )
+            raise AttributeError('Please create FFIs first with .get_FFIs() command!')
+
         with plt.style.context(PANDORASTYLE):
             vmin = kwargs.pop("vmin", self.VISDA.bias.value)
             vmax = kwargs.pop("vmax", self.VISDA.bias.value + 20)
             cmap = kwargs.pop("cmap", "Greys_r")
             fig, ax = plt.subplots(figsize=figsize)
             im = ax.imshow(
-                ffis[0],
+                self.ffis[0],
                 origin="lower",
                 cmap=cmap,
                 vmin=vmin,
@@ -506,3 +549,105 @@ class PandoraSim(object):
 
                 [plot_corner(c, ax, color="r") for c in self.VISDA.corners]
         return fig
+
+    def save_visda(
+        self,
+        outfile: str = 'pandora_'+Time.now().strftime('%Y-%m-%dT%H:%M:%S')+'_l1_visda.fits',
+        rois: bool = False,
+        overwrite: bool = True,
+    ):
+        """Function to save FFIs in the FITS format"""
+        if not hasattr(self, "ffis"):
+            raise AttributeError('Please create FFIs first with .get_FFIs() command!')
+
+        corstime = int(np.floor((self.obstime - Time("2000-01-01T12:00:00", scale='utc')).sec))
+        finetime = int(corstime % 1 * 10**9 // 1)
+
+        primary_kwds = {
+            'EXTNAME': ('PRIMARY', 'name of extension'),
+            'NEXTEND': (2, 'number of standard extensions'),
+            'SIMDATA': (True, 'simulated data'),
+            'SCIDATA': (False, 'science data'),
+            'TELESCOP': ('NASA Pandora', 'telescope'),
+            'INSTRMNT': ('VISDA', 'instrument'),
+            'CREATOR': ('Pandora DPC', 'creator of this product'),
+            'CRSOFTV': ('v'+str(__version__), 'creator software version'),
+            'TARG_RA': (self.ra.value, 'target right ascension [deg]'),
+            'TARG_DEC': (self.dec.value, 'target declination [deg]'),
+            'FRMSREQD': (self.ffi_nframes, 'number of frames requested'),
+            'FRMSCLCT': (self.ffi_nframes, 'number of frames collected'),
+            'NUMCOAD': (1, 'number of frames coadded'),
+            'FRMTIME': (self.ffi_nreads * self.VISDA.integration_time.value, 'time in each frame [s]'),
+            'EXPDELAY': (-1, 'exposure time delay [ms]'),
+            'RICEX': (-1, 'bit noise parameter for Rice compression'),
+            'RICEY': (-1, 'bit noise parameter for Rice compression'),
+            'CORSTIME': (corstime, 'seconds since the TAI Epoch (12PM Jan 1, 2000)'),
+            'FINETIME': (finetime, 'nanoseconds added to CORSTIME seconds'),
+        }
+
+        if rois:
+            n_arrs, frames, nrows, ncols = self.subarrays.shape
+
+            # Find the next largest perfect square from the number of subarrays given
+            next_square = int(np.ceil(np.sqrt(n_arrs)) ** 2)
+            sq_sides = int(np.sqrt(next_square))
+
+            # Pad the subarrays with addtional subarrays full of zeros up to the next perfect square
+            subarrays = self.subarrays
+            padding = np.zeros((next_square - n_arrs, frames, nrows, ncols), dtype=int)
+            subarrays = np.append(subarrays, padding, axis=0)
+
+            image_data = (subarrays.reshape(frames, sq_sides, sq_sides, nrows, ncols)
+                          .swapaxes(2, 3)
+                          .reshape(frames, sq_sides*nrows, sq_sides*ncols))
+
+            roi_data = Table(self.VISDA.corners)
+
+            roitable_kwds = {
+                'NAXIS': (2, 'number of array dimensions'),
+                'NAXIS1': (len(self.VISDA.corners[0]), 'length of dimension 1'),
+                'NAXIS2': (len(self.VISDA.corners), 'length of dimension 2'),
+                'PCOUNT': (0, 'number of group parameters'),
+                'GCOUNT': (1, 'number of groups'),
+                'TFIELDS': (2, 'number of table fields'),
+                'TTYPE1': ('Column', 'table field 1 type'),
+                'TFORM1': ('I21', 'table field 1 format'),
+                'TUNIT1': ('pix', 'table field 1 unit'),
+                'TBCOL1': (1, ''),
+                'TTYPE2': ('Row', 'table field 2 type'),
+                'TFORM2': ('I21', 'table field 2 format'),
+                'TUNIT2': ('pix', 'table field 2 unit'),
+                'TBCOL2': (22, ''),
+                'EXTNAME': ('ROITABLE', 'name of extension'),
+                'NROI': (len(self.VISDA.corners), 'number of regions of interest'),
+                'ROISTRTX': (-1, 'region of interest origin position in column'),
+                'ROISTRTY': (-1, 'region of interest origin position in row'),
+                'ROISIZEX': (-1, 'region of interest size in column'),
+                'ROISIZEY': (-1, 'region of interest size in row'),
+            }
+        else:
+            image_data = self.ffis
+
+        image_kwds = {
+            'NAXIS': (3, 'number of array dimensions'),
+            'NAXIS1': (image_data.shape[1], 'first axis size'),  # might need to change these
+            'NAXIS2': (image_data.shape[2], 'second axis size'),
+            'NAXIS3': (image_data.shape[0], 'third axis size'),
+            'EXTNAME': ('SCIENCE', 'extension name'),
+            'TTYPE1': ('COUNTS', 'data title: raw pixel counts'),
+            'TFORM1': ('J', 'data format: images of unsigned 32-bit integers'),
+            'TUNIT1': ('count', 'data units: count'),
+        }
+
+        if rois:
+            save_to_FITS(
+                image_data,
+                outfile,
+                primary_kwds,
+                image_kwds,
+                roitable=True,
+                roitable_kwds=roitable_kwds,
+                roi_data=roi_data,
+                overwrite=overwrite)
+        else:
+            save_to_FITS(image_data, outfile, primary_kwds, image_kwds, overwrite=overwrite)
