@@ -688,7 +688,7 @@ def plot_nirda_integrations(
     ]
     integrations = [np.hstack(idx) for idx in integrations]
     dat = np.vstack([get_plot_vectors(inte) for inte in integrations])
-    with plt.style.context("seaborn-white"):
+    with plt.style.context("seaborn-v0_8-white"):
         fig, ax = plt.subplots(figsize=(np.max([5, len(dat) // 25]), 2))
         ax.plot(dat[:, 0], ls="--", c="grey")
         ax.scatter(
@@ -722,3 +722,39 @@ def plot_nirda_integrations(
         )
         ax.legend(frameon=True, bbox_to_anchor=(1.1, 1.05))
     return fig
+
+
+def save_to_FITS(
+    data: np.ndarray,
+    filename: str,
+    primary_kwds: dict,
+    image_kwds: dict,
+    roitable: bool = False,
+    roitable_kwds: dict | None = None,
+    roi_data: np.ndarray | None = None,
+    overwrite: bool = True,
+):
+    primary_hdu = fits.PrimaryHDU()
+
+    for key, value in primary_kwds.items():
+        primary_hdu.header[key] = value
+
+    image_hdu = fits.ImageHDU(data)
+
+    for key, value in image_kwds.items():
+        image_hdu.header[key] = value
+
+    hdu_list = [primary_hdu, image_hdu]
+
+    if roitable:
+        # table_hdu = fits.TableHDU(roi_data)
+        table_hdu = fits.table_to_hdu(roi_data)
+
+        for key, value in roitable_kwds.items():
+            table_hdu.header[key] = value
+
+        hdu_list.append(table_hdu)
+
+    hdul = fits.HDUList(hdu_list)
+
+    hdul.writeto(filename, overwrite=overwrite)
