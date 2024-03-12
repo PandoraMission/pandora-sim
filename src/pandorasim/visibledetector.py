@@ -81,7 +81,7 @@ class VisibleDetector(visda):
             self.fieldstop = ~((np.abs(C) >= r) | (np.abs(R) >= r))
 
         # ROW COLUMN JUST LIKE PYTHON
-        self.subarray_size = (50, 51)
+        self.subarray_size = (50, 50)
         # COLUMN, ROW
         self.subarray_row, self.subarray_column = np.meshgrid(
             +np.arange(self.subarray_size[0]),
