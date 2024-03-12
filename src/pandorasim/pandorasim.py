@@ -1,4 +1,4 @@
-"""Holds metadata and methods on Pandora"""
+"""Holds methods on Pandora"""
 
 # Standard library
 from copy import deepcopy
@@ -11,24 +11,40 @@ import pandas as pd
 from astropy.time import Time
 from matplotlib.patches import PathPatch
 from matplotlib.path import Path
+from astropy.table import Table
 
-from . import PANDORASTYLE
+from pandorasat.hardware import Hardware
+from pandorasat.orbit import Orbit
+
+from . import PANDORASTYLE, __version__
 from .irdetector import NIRDetector
-from .optics import Optics
-from .orbit import Orbit
-from .utils import get_jitter, get_sky_catalog
+from .utils import get_jitter, get_sky_catalog, save_to_FITS
 from .visibledetector import VisibleDetector
 
 
-# @dataclass
 class PandoraSim(object):
-    """Holds information and methods for the full Pandora system.
+    """Holds methods for simulating Pandora data.
 
-    Args:
-        NIRDA (IRDetector): Class of the NIRDA properties
-        VISDA (IRDetector): Class of the VISDA properties
-        Optics (IRDetector): Class of the Optics properties
-        Orbit (IRDetector): Class of the Orbit properties
+    Attributes
+    ----------
+    ra : u.Quantity
+        Right Ascension of the target.
+    dec : u.Quantity
+        Declination of the target.
+    theta : u.Quantity
+        Roll angle of the observatory.
+    obstime : Time
+        Time of observation. Default is Time.now().
+    duration : u.Quantity
+        Observation duration. Default is 60 minutes.
+    rowjitter_1sigma : u.Quantity
+        1 sigma jitter in the pixel row direction. Default is 0.2 pixels.
+    coljitter_1sigma : u.Quantity
+        1 sigma jitter in the pixel column direction. Default is 0.2 pixels.
+    thetajitter_1sigma : u.Quantity
+        1 sigma jitter in the spacecraft roll. Default is 0.0005 degrees.
+    jitter_timescale : u.Quantity
+        Timescale on which jitter occurs. Default is 60 seconds.
     """
 
     def __init__(
@@ -51,23 +67,16 @@ class PandoraSim(object):
             duration,
         )
         self.Orbit = Orbit()
-        self.Optics = Optics()
+        self.Hardware = Hardware()
         self.NIRDA = NIRDetector(
-            "NIR",
             ra,
             dec,
             theta,
-            1.19 * u.arcsec / u.pixel,
-            18.0 * u.um / u.pixel,
-            False,
         )
         self.VISDA = VisibleDetector(
-            "Visible",
             ra,
             dec,
             theta,
-            0.78 * u.arcsec / u.pixel,
-            6.5 * u.um / u.pixel,
         )
         self.rowjitter_1sigma = rowjitter_1sigma
         self.coljitter_1sigma = coljitter_1sigma
@@ -89,8 +98,6 @@ class PandoraSim(object):
 
         self.VISDA.corners, self.VISDA.Catalogs = self.get_vis_stars()
         self.NIRDA.Catalog = self.get_nirda_stars()
-
-        # self.targetlist = pd.read_csv(f"{PACKAGEDIR}/data/targets.csv")
 
     def __repr__(self):
         return f"Pandora Observatory (RA: {np.round(self.ra, 3)}, Dec: {np.round(self.dec, 3)}, theta: {np.round(self.theta, 3)})"
@@ -125,13 +132,19 @@ class PandoraSim(object):
     def get_sky_catalog(
         self,
         distortion: bool = True,
-    ):
+        **kwargs,
+    ) -> pd.DataFrame:
         """Gets the source catalog of an input target
 
         Parameters
         ----------
         target_name : str
             Target name to obtain catalog for.
+        distortion : bool
+            Whether to apply a distortion to the WCS when mapping RA and Dec of catalog targets
+            to detector pixels. Default is True.
+        **kwargs
+            Additional arguments passed to the utils.get_sky_catalog function.
 
         Returns
         -------
@@ -154,11 +167,9 @@ class PandoraSim(object):
                 ** 0.5,
             ]
         )
-        # catalog_data = Catalogs.query_object(target_name, radius=radius, catalog="TIC")
-        # target_ra, target_dec = catalog_data[0][['ra', 'dec']].values()
 
         # Get location and magnitude data
-        cat = get_sky_catalog(self.ra, self.dec, radius=radius * u.deg)
+        cat = get_sky_catalog(self.ra, self.dec, radius=radius * u.deg, **kwargs)
 
         ra, dec, mag = cat["coords"].ra.deg, cat["coords"].dec.deg, cat["bmag"]
         vis_pix_coords = self.VISDA.world_to_pixel(
@@ -245,7 +256,14 @@ class PandoraSim(object):
         )
         return source_catalog
 
-    def get_nirda_stars(self):
+    def get_nirda_stars(self) -> pd.DataFrame:
+        """Gets all of the stars contained within the NIR detector for the given pointing.
+
+        Returns
+        -------
+        cat : pd.DataFrame
+            Catalog of stars contained within the NIR detector for the given pointing.
+        """
         cat = self.SkyCatalog.copy()
         cat[["nir_row", "nir_column"]] = self.NIRDA.world_to_pixel(
             cat.ra, cat.dec
@@ -261,6 +279,19 @@ class PandoraSim(object):
         return cat[k].reset_index(drop=True)
 
     def get_vis_stars(self):
+        """Gets all of the stars contained within the visible detector for the given pointing.
+
+        Returns
+        -------
+        corners : np.ndarray
+            An array containing the row and column of the corners of the subarrays of the stars
+            contained within the visible detector. Currenly only includes the target star and
+            eight of the brightest background stars.
+        minicats : list
+            List containing astropy.Table objects for each of the stars contained within the visible
+            detector. Currently only includes the target star and eight of the brightest background
+            stars.
+        """
         dist = self.SkyCatalog["ang_sep"] > (
             self.VISDA.pixel_scale * 50 * u.pixel
         ).to(u.deg)
@@ -322,158 +353,19 @@ class PandoraSim(object):
             )
         return corners, minicats
 
-    # def get_FFIs(
-    #     self,
-    #     prf_func,
-    #     nreads=10,
-    #     nt=40,
-    #     include_noise=True,
-    #     cosmic_rays=True,
-    # ):
-    #     # if prf_func is None:
-    #     #     prf_func = self.VISDA.get_fastPRF(wavelength, temperature)
+    def plot_footprint(self, ax=None) -> plt.axis:
+        """Plots the footprint of VISDA and NIRDA at the given pointing.
 
-    #     # Spacecraft jitter motion
-    #     time, rowj, colj, thetaj = get_jitter(
-    #         self.rowjitter_1sigma.value,
-    #         self.coljitter_1sigma.value,
-    #         self.thetajitter_1sigma.value,
-    #         correlation_time=self.jitter_timescale,
-    #         nframes=nt * nreads,
-    #         frame_time=self.VISDA.integration_time,
-    #     )
-    #     science_image = u.Quantity(
-    #         np.zeros(
-    #             (
-    #                 nt,
-    #                 *self.VISDA.shape,
-    #             ),
-    #             dtype=int,
-    #         ),
-    #         unit="electron",
-    #         dtype="int",
-    #     )
-    #     vis_y, vis_x = self.VISDA.world_to_pixel(
-    #         self.SkyCatalog.ra, self.SkyCatalog.dec
-    #     )
+        Parameters
+        ----------
+        ax : matplotlib.pyplot.axis
+            Figure axis to plot the footprint.
 
-    #     for jdx in tqdm(range(nt * nreads)):
-    #         # Update the positions via the new WCS in each frame
-    #         # vis_x, vis_y = (
-    #         #     self.VISDA.wcs(
-    #         #         target_ra + (xj[jdx] * self.VISDA.pixel_scale).to(u.deg),
-    #         #         target_dec + (yj[jdx] * self.VISDA.pixel_scale).to(u.deg),
-    #         #         theta + thetaj[jdx],
-    #         #         distortion=distortion,
-    #         #     )
-    #         #     .all_world2pix(
-    #         #         np.vstack([self.SkyCatalog.ra, self.SkyCatalog.dec]).T, 1
-    #         #     )
-    #         #     .T
-    #         # )
-
-    #         for idx, s in self.SkyCatalog.iterrows():
-    #             #            for idx in range(len(self.SkyCatalog)):
-    #             if (
-    #                 (vis_x[idx] < 0)
-    #                 | (vis_x[idx] > self.VISDA.shape[1])
-    #                 | (vis_y[idx] < 0)
-    #                 | (vis_y[idx] > self.VISDA.shape[0])
-    #             ):
-    #                 continue
-
-    #             x, y = (
-    #                 colj[jdx].value + vis_x[idx] - self.VISDA.shape[1] // 2,
-    #                 rowj[jdx].value + vis_y[idx] - self.VISDA.shape[0] // 2,
-    #             )
-
-    #             y1, x1, f = prf_func(y, x)
-    #             Y, X = np.asarray(
-    #                 np.meshgrid(
-    #                     y1 + self.VISDA.shape[0] // 2,
-    #                     x1 + self.VISDA.shape[1] // 2,
-    #                     indexing="ij",
-    #                 )
-    #             ).astype(int)
-    #             #                print(X.mean(), Y.mean())
-    #             k = (
-    #                 (X >= 0)
-    #                 & (X < self.VISDA.shape[1])
-    #                 & (Y >= 0)
-    #                 & (Y < self.VISDA.shape[0])
-    #             )
-    #             science_image[jdx // nreads, Y[k], X[k]] += u.Quantity(
-    #                 np.random.poisson(
-    #                     self.VISDA.apply_gain(
-    #                         f[k]
-    #                         * (
-    #                             (s.vis_counts * u.DN / u.second)
-    #                             * self.VISDA.integration_time.to(u.second)
-    #                         )
-    #                     ).value
-    #                 ),
-    #                 unit="electron",
-    #                 dtype=int,
-    #             )
-
-    #     if cosmic_rays:
-    #         # This is the worst rate we expect, from the SAA
-    #         cosmic_ray_rate = 1000 / (u.second * u.cm**2)
-    #         cosmic_ray_expectation = (
-    #             cosmic_ray_rate
-    #             * ((self.VISDA.pixel_size * 2048 * u.pix) ** 2).to(u.cm**2)
-    #             * self.VISDA.integration_time
-    #         ).value
-
-    #         for jdx in range(nt):
-    #             science_image[jdx] += get_simple_cosmic_ray_image(
-    #                 cosmic_ray_expectation=cosmic_ray_expectation,
-    #                 gain_function=self.VISDA.apply_gain,
-    #                 image_shape=self.VISDA.shape,
-    #             )
-
-    #     # Apply the flat-field
-    #     science_image = u.Quantity(
-    #         science_image.value.astype(float) * self.VISDA.flat[None, :, :],
-    #         dtype=int,
-    #         unit="electron",
-    #     )
-
-    #     # electrons in a read
-    #     #        science_image *= u.electron
-
-    #     if include_noise:
-    #         # # background light?
-    #         science_image += self.VISDA.get_background_light_estimate(
-    #             self.SkyCatalog.loc[0, "ra"], self.SkyCatalog.loc[0, "dec"]
-    #         )
-
-    #     # time integrate
-    #     science_image *= nreads
-
-    #     # fieldstop
-    #     science_image *= self.VISDA.fieldstop.astype(int)
-
-    #     if include_noise:
-    #         # noise
-    #         for jdx in range(nt):
-    #             noise = np.zeros(self.VISDA.shape, int)
-    #             noise = np.random.normal(
-    #                 loc=self.VISDA.bias.value,
-    #                 scale=self.VISDA.read_noise.value,
-    #                 size=self.VISDA.shape,
-    #             )
-    #             noise += np.random.poisson(
-    #                 lam=(self.VISDA.dark * self.VISDA.integration_time).value,
-    #                 size=self.VISDA.shape,
-    #             )
-
-    #             science_image[jdx] += u.Quantity(
-    #                 noise, unit="electron", dtype=int
-    #             )
-    #     return time, rowj, colj, thetaj, science_image
-
-    def plot_footprint(self, ax=None):
+        Returns
+        -------
+        ax : matplotlib.pyplot.axis
+            Figure axis with footprints plotted.
+        """
         with plt.style.context(PANDORASTYLE):
             if ax is None:
                 fig, ax = plt.subplots()
@@ -522,30 +414,98 @@ class PandoraSim(object):
             )
         return ax
 
-    def plot_FFI(
+    def get_FFIs(
         self,
-        nreads=10,
-        include_cosmics=False,
-        include_noise=True,
-        figsize=(10, 8),
-        subarrays=True,
+        nframes: int = 1,
+        nreads: int = 10,
+        include_cosmics: bool = False,
+        include_noise: bool = True,
+        make_subarrays: bool = True,
         **kwargs,
     ):
-        _, ffis = self.VISDA.get_FFIs(
+        """Wrapper function for VISDA.get_FFIs to allow user access at the `PandoraSim` class level"""
+        self.ffi_nframes = nframes
+        self.ffi_nreads = nreads
+
+        _, self.ffis = self.VISDA.get_FFIs(
             self.SkyCatalog,
+            nframes=nframes,
             nreads=nreads,
-            nframes=1,
             include_cosmics=include_cosmics,
             include_noise=include_noise,
-            #            freeze_dimensions=freeze_dimensions,
+            **kwargs,
         )
+
+        if make_subarrays:
+            subarrays = []
+
+            for idx in range(len(self.VISDA.Catalogs)):
+                _, f, _ = self.VISDA.get_subarray(
+                    self.VISDA.Catalogs[idx],
+                    self.VISDA.corners[idx],
+                    nreads=nreads,
+                    nframes=nframes,
+                    quiet=True,
+                    include_noise=include_noise,
+                )
+
+                subarrays.append(f)
+
+            self.subarrays = np.array(subarrays)
+
+    def plot_FFI(
+        self,
+        nreads: int = 10,
+        include_cosmics: bool = False,
+        include_noise: bool = True,
+        figsize: tuple = (10, 8),
+        subarrays: bool = True,
+        max_subarrays=8,
+        **kwargs,
+    ) -> plt.figure:
+        """Plots the simulated FFIs of the initialized target in the visible camera.
+
+        Parameters
+        ----------
+        nreads : int
+            Number of detector reads to include in the integration. Default is 10.
+        include_cosmics : bool
+            Flag to determine whether cosmic rays are simulated on the detector. Default is True.
+        include_noise : bool
+            Flag to determine whether background noise is simulated on the detector. Defautl is
+            True.
+        figsize : tuple
+            Output figure size to be passed to matplotlib.pyplot. Default is (10, 8).
+        subarrays : bool
+            Flag to determine whether visible detector subarrays centered on the target and
+            background stars will be included in the plot. Default is True.
+        **kwargs
+            Additional arguments to be passed to the plot_corner function. This function is
+            responsible for plotting the subarrays on the detector image.
+
+        Returns
+        -------
+        fig : matplotlib.pyplot.figure
+            Output figure of the visible detector.
+        """
+        if not hasattr(self, "ffis"):
+            # _, self.ffis = self.VISDA.get_FFIs(
+            #     self.SkyCatalog,
+            #     nreads=nreads,
+            #     nframes=1,
+            #     include_cosmics=include_cosmics,
+            #     include_noise=include_noise,
+            #     #            freeze_dimensions=freeze_dimensions,
+            # )
+            raise AttributeError('Please create FFIs first with .get_FFIs() command!')
+
         with plt.style.context(PANDORASTYLE):
             vmin = kwargs.pop("vmin", self.VISDA.bias.value)
             vmax = kwargs.pop("vmax", self.VISDA.bias.value + 20)
             cmap = kwargs.pop("cmap", "Greys_r")
             fig, ax = plt.subplots(figsize=figsize)
             im = ax.imshow(
-                ffis[0],
+                self.ffis[0],
                 origin="lower",
                 cmap=cmap,
                 vmin=vmin,
@@ -589,3 +549,105 @@ class PandoraSim(object):
 
                 [plot_corner(c, ax, color="r") for c in self.VISDA.corners]
         return fig
+
+    def save_visda(
+        self,
+        outfile: str = 'pandora_'+Time.now().strftime('%Y-%m-%dT%H:%M:%S')+'_l1_visda.fits',
+        rois: bool = False,
+        overwrite: bool = True,
+    ):
+        """Function to save FFIs in the FITS format"""
+        if not hasattr(self, "ffis"):
+            raise AttributeError('Please create FFIs first with .get_FFIs() command!')
+
+        corstime = int(np.floor((self.obstime - Time("2000-01-01T12:00:00", scale='utc')).sec))
+        finetime = int(corstime % 1 * 10**9 // 1)
+
+        primary_kwds = {
+            'EXTNAME': ('PRIMARY', 'name of extension'),
+            'NEXTEND': (2, 'number of standard extensions'),
+            'SIMDATA': (True, 'simulated data'),
+            'SCIDATA': (False, 'science data'),
+            'TELESCOP': ('NASA Pandora', 'telescope'),
+            'INSTRMNT': ('VISDA', 'instrument'),
+            'CREATOR': ('Pandora DPC', 'creator of this product'),
+            'CRSOFTV': ('v'+str(__version__), 'creator software version'),
+            'TARG_RA': (self.ra.value, 'target right ascension [deg]'),
+            'TARG_DEC': (self.dec.value, 'target declination [deg]'),
+            'FRMSREQD': (self.ffi_nframes, 'number of frames requested'),
+            'FRMSCLCT': (self.ffi_nframes, 'number of frames collected'),
+            'NUMCOAD': (1, 'number of frames coadded'),
+            'FRMTIME': (self.ffi_nreads * self.VISDA.integration_time.value, 'time in each frame [s]'),
+            'EXPDELAY': (-1, 'exposure time delay [ms]'),
+            'RICEX': (-1, 'bit noise parameter for Rice compression'),
+            'RICEY': (-1, 'bit noise parameter for Rice compression'),
+            'CORSTIME': (corstime, 'seconds since the TAI Epoch (12PM Jan 1, 2000)'),
+            'FINETIME': (finetime, 'nanoseconds added to CORSTIME seconds'),
+        }
+
+        if rois:
+            n_arrs, frames, nrows, ncols = self.subarrays.shape
+
+            # Find the next largest perfect square from the number of subarrays given
+            next_square = int(np.ceil(np.sqrt(n_arrs)) ** 2)
+            sq_sides = int(np.sqrt(next_square))
+
+            # Pad the subarrays with addtional subarrays full of zeros up to the next perfect square
+            subarrays = self.subarrays
+            padding = np.zeros((next_square - n_arrs, frames, nrows, ncols), dtype=int)
+            subarrays = np.append(subarrays, padding, axis=0)
+
+            image_data = (subarrays.reshape(frames, sq_sides, sq_sides, nrows, ncols)
+                          .swapaxes(2, 3)
+                          .reshape(frames, sq_sides*nrows, sq_sides*ncols))
+
+            roi_data = Table(self.VISDA.corners)
+
+            roitable_kwds = {
+                'NAXIS': (2, 'number of array dimensions'),
+                'NAXIS1': (len(self.VISDA.corners[0]), 'length of dimension 1'),
+                'NAXIS2': (len(self.VISDA.corners), 'length of dimension 2'),
+                'PCOUNT': (0, 'number of group parameters'),
+                'GCOUNT': (1, 'number of groups'),
+                'TFIELDS': (2, 'number of table fields'),
+                'TTYPE1': ('Column', 'table field 1 type'),
+                'TFORM1': ('I21', 'table field 1 format'),
+                'TUNIT1': ('pix', 'table field 1 unit'),
+                'TBCOL1': (1, ''),
+                'TTYPE2': ('Row', 'table field 2 type'),
+                'TFORM2': ('I21', 'table field 2 format'),
+                'TUNIT2': ('pix', 'table field 2 unit'),
+                'TBCOL2': (22, ''),
+                'EXTNAME': ('ROITABLE', 'name of extension'),
+                'NROI': (len(self.VISDA.corners), 'number of regions of interest'),
+                'ROISTRTX': (-1, 'region of interest origin position in column'),
+                'ROISTRTY': (-1, 'region of interest origin position in row'),
+                'ROISIZEX': (-1, 'region of interest size in column'),
+                'ROISIZEY': (-1, 'region of interest size in row'),
+            }
+        else:
+            image_data = self.ffis
+
+        image_kwds = {
+            'NAXIS': (3, 'number of array dimensions'),
+            'NAXIS1': (image_data.shape[1], 'first axis size'),  # might need to change these
+            'NAXIS2': (image_data.shape[2], 'second axis size'),
+            'NAXIS3': (image_data.shape[0], 'third axis size'),
+            'EXTNAME': ('SCIENCE', 'extension name'),
+            'TTYPE1': ('COUNTS', 'data title: raw pixel counts'),
+            'TFORM1': ('J', 'data format: images of unsigned 32-bit integers'),
+            'TUNIT1': ('count', 'data units: count'),
+        }
+
+        if rois:
+            save_to_FITS(
+                image_data,
+                outfile,
+                primary_kwds,
+                image_kwds,
+                roitable=True,
+                roitable_kwds=roitable_kwds,
+                roi_data=roi_data,
+                overwrite=overwrite)
+        else:
+            save_to_FITS(image_data, outfile, primary_kwds, image_kwds, overwrite=overwrite)

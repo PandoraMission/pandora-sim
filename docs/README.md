@@ -2,29 +2,27 @@
 
 # PandoraSim
 
-This Python package contains metadata for Pandora, and **basic** functions to create estimates of, e.g. count rates from targets on the detectors.
+This Python package contains **basic** functions to simulate data from Pandora including creating estimates of, e.g. count rates from targets on the detectors.
 
 ### Installation
 
-To install this package you can use
+Eventually you will be able to install this package via pip. For now, clone the github repository, enter the `pandora-sim` directory, and run the command `poetry install` to install the package. This will allow `pandora-sim` to be called like any other Python package.
 
-```
-pip install pandora-sim --upgrade
-```
-
-Make sure to upgrade regularly to get the latest estimates of the Pandora meta data.
+Make sure to upgrade regularly to get the latest functionality and Pandora metadata.
 
 
 ### Example Usage
 
-Below is an example usage of some of the functionality in this package. In general, this package will allow you to get metadata from specific subsystems of Pandora.
+Below is an example usage of some of the functionality in this package. For more in-depth walkthroughs and examples of the `pandora-sim` functionality, see the example notebooks in the `docs/` directory.
 
 ```python
-from pandorasim import PandoraSim
-print(PandoraSim.NIRDA.gain)
-print(PandoraSim.Optics.PSF)
-print(PandoraSim.VisibleDetector.sensitivity(wavelength))
-print(PandoraSim.Orbit.period)
+import pandorasim as ps
+from astropy.coordinates import SkyCoord
+import matplotlib.pyplot as plt
+c = SkyCoord.from_name("GJ 436")
+p = ps.PandoraSim(ra=c.ra, dec=c.dec, theta=10*u.deg)
+fig = p.plot_footprint()
+plt.show()
 ```
 
-See our API documentation for full details on the metadata available in this package.
+See our API documentation for full details on the functions available in this package.

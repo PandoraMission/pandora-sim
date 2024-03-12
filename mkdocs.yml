@@ -8,8 +8,6 @@ nav:
       - NIRDA: irdetector.md
       - VISDA: visibledetector.md
       - PSF: psf.md
-      - Optics: optics.md
-      - Orbit: orbit.md
     - Notebooks:
       - WASP-69b Demo: WASP-69.ipynb
       - GJ 3470b Demo: GJ3470.ipynb

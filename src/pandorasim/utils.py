@@ -14,6 +14,8 @@ from astropy.time import Time
 from astroquery import log as asqlog
 from astroquery.gaia import Gaia
 from astroquery.ipac.nexsci.nasa_exoplanet_archive import NasaExoplanetArchive
+from copy import copy
+import matplotlib.pyplot as plt
 
 from . import PACKAGEDIR, __version__
 
@@ -29,6 +31,8 @@ with warnings.catch_warnings():
 
 asqlog.setLevel("ERROR")
 # Third-party
+
+frame_dict = {"reset": 1, "read": 2, "drop": 4}
 
 
 def get_phoenix_model(teff, logg, jmag):
@@ -190,33 +194,65 @@ def get_planets(
 #         df = pd.DataFrame(columns=columns.split(", "))
 #     return df
 
-
 @lru_cache
 def get_sky_catalog(
-    ra=210.8023,
-    dec=54.349,
-    radius=0.155,
-    gbpmagnitude_range=(-3, 20),
+    ra: float,
+    dec: float,
+    radius: float = 0.155,
+    gbpmagnitude_range: tuple = (-3, 20),
     limit=None,
-    gaia_keys=[
-        "source_id",
-        "ra",
-        "dec",
-        "parallax",
-        "pmra",
-        "pmdec",
-        "radial_velocity",
-        "ruwe",
-        "phot_bp_mean_mag",
-        "teff_gspphot",
-        "logg_gspphot",
-    ],
-):
-    """Gets a catalog of coordinates on the sky based on an input ra, dec and radius"""
+    gaia_keys: list = [],
+    time: Time = Time.now()
+) -> dict :
+    """
+    Gets a catalog of coordinates on the sky based on an input RA, Dec, and radius as well as
+    a magnitude range for Gaia. The user can also specify additional keywords to be grabbed
+    from Gaia catalog.
+
+    Parameters
+    ----------
+    ra : float
+        Right Ascension of the center of the query radius in degrees.
+    dec : float
+        Declination of the center of the query radius in degrees.
+    radius : float
+        Radius centered on ra and dec that will be queried in degrees.
+    gbpmagnitude_range : tuple
+        Magnitude limits for the query. Targets outside of this range will not be included in
+        the final output dictionary.
+    limit : int
+        Maximum number of targets from query that will be included in output dictionary. If a
+        limit is specified, targets will be included based on proximity to specified ra and dec.
+    gaia_keys : list
+        List of additional Gaia archive columns to include in the final output dictionary.
+    time : astropy.Time object
+        Time at which to evaluate the positions of the targets in the output dictionary.
+
+    Returns
+    -------
+    cat : dict
+        Dictionary of values from the Gaia archive for each keyword.
+    """
+
+    base_keys = ["source_id",
+                 "ra",
+                 "dec",
+                 "parallax",
+                 "pmra",
+                 "pmdec",
+                 "radial_velocity",
+                 "ruwe",
+                 "phot_bp_mean_mag",
+                 "teff_gspphot",
+                 "logg_gspphot",
+                 "phot_g_mean_flux",
+                 "phot_g_mean_mag",]
+
+    all_keys = base_keys + gaia_keys
 
     query_str = f"""
     SELECT {f'TOP {limit} ' if limit is not None else ''}* FROM (
-        SELECT gaia.{', gaia.'.join(gaia_keys)}, dr2.teff_val AS dr2_teff_val,
+        SELECT gaia.{', gaia.'.join(all_keys)}, dr2.teff_val AS dr2_teff_val,
         dr2.rv_template_logg AS dr2_logg, tmass.j_m, tmass.j_msigcom, tmass.ph_qual, DISTANCE(
         POINT({u.Quantity(ra, u.deg).value}, {u.Quantity(dec, u.deg).value}),
         POINT(gaia.ra, gaia.dec)) AS ang_sep,
@@ -249,6 +285,8 @@ def get_sky_catalog(
     cat = {
         "jmag": tbl["j_m"].data.filled(np.nan),
         "bmag": tbl["phot_bp_mean_mag"].data.filled(np.nan),
+        "gmag": tbl["phot_g_mean_mag"].data.filled(np.nan),
+        "gflux": tbl["phot_g_mean_flux"].data.filled(np.nan),
         "ang_sep": tbl["ang_sep"].data.filled(np.nan) * u.deg,
     }
     cat["teff"] = (
@@ -275,10 +313,12 @@ def get_sky_catalog(
             radial_velocity=tbl["radial_velocity"].value.filled(fill_value=0)
             * u.km
             / u.s,
-        ).apply_space_motion(Time.now())
+        ).apply_space_motion(time)
     cat["source_id"] = np.asarray(
         [f"Gaia DR3 {i}" for i in tbl["source_id"].value.data]
     )
+    for key in gaia_keys:
+        cat[key] = tbl[key].data.filled(np.nan)
     return cat
 
 
@@ -345,9 +385,9 @@ def get_jitter(
     rowstd: float = 1,
     colstd: float = 0.3,
     thetastd: float = 0.0005,
-    correlation_time=1 * u.second,
-    nframes=200,
-    frame_time=0.2 * u.second,
+    correlation_time: float = 1 * u.second,
+    nframes: int = 200,
+    frame_time: float = 0.2 * u.second,
     seed=None,
 ):
     """Returns some random, time correlated jitter time-series.
@@ -432,12 +472,13 @@ def get_simple_cosmic_ray_image(
     image_shape=(2048, 2048),
     gain_function=lambda x: x.value * u.electron,
 ):
-    """Function to get a simple cosmic ray image
+    """
+    Function to get a simple cosmic ray image
 
-    This function has no basis in physics at all.
-    The rate of cosmic rays, the energy deposited, sampling distributions, all of it is completely without a basis in physics.
-    All this function can do is put down fairly reasonable "tracks" that mimic the impact of cosmic rays,
-    with some tuneable parameters to change the properties.
+    This function has no basis in physics at all. The rate of cosmic rays, the energy deposited,
+    sampling distributions, all of it is completely without a basis in physics. All this function
+    can do is put down fairly reasonable "tracks" that mimic the impact of cosmic rays, with some
+    tuneable parameters to change the properties.
 
     """
     ncosmics = np.random.poisson(cosmic_ray_expectation)
@@ -500,3 +541,220 @@ def get_simple_cosmic_ray_image(
             gain_function(wcoords * fper_element).value
         )
     return u.Quantity(im, dtype=int, unit=u.electron)
+
+
+def get_integrations(
+    SC_Resets1,
+    SC_Resets2,
+    SC_DropFrames1,
+    SC_DropFrames2,
+    SC_DropFrames3,
+    SC_ReadFrames,
+    SC_Groups,
+    SC_Integrations,
+):
+    """
+    Function to generate the integration frames as a list of arrays containing flags denoting
+    the status of each frame. The frames are grouped by status and ordered chronologically.
+
+    Parameters
+    ----------
+    SC_Resets1 : int
+        Number of reset frames at the start of the first integration of exposure
+    SC_Resets2 : int
+        Number of resent frames at the start of 1 through n integrations of exposure
+    SC_DropFrames1 : int
+        Number of dropped frames after reset of any integration of exposure
+    SC_DropFrames2 : int
+        Number of dropped frames in every group of integrations of exposure except the last group
+    SC_DropFrames3 : int
+        Number of dropped frames in the last group of each integration of exposure
+    SC_ReadFrames : int
+        Number of frames read during each group of integration of exposure
+    SC_Groups : int
+        Number of groups per integration of exposure
+    SC_Integrations : int
+        Number of integrations per exposure
+
+    Returns
+    -------
+    integrations : list
+        List of arrays containing each frame in the integrations grouped in chronological order
+        with each integer element representing that frame's status.
+    """
+    cintn = [
+        np.zeros(SC_Resets2, int) + frame_dict["reset"],
+        *[
+            np.zeros(SC_ReadFrames, int) + frame_dict["read"],
+            np.zeros(SC_DropFrames2, int) + frame_dict["drop"],
+        ]
+        * (SC_Groups - 1),
+        np.zeros(SC_ReadFrames, int) + frame_dict["read"],
+    ]
+    cint1 = copy(cintn)
+    cint1.pop(0)
+
+    cint1.insert(0, np.zeros(SC_Resets1, int) + frame_dict["reset"])
+    cint1.insert(1, np.zeros(SC_DropFrames1, int) + frame_dict["drop"])
+
+    integrations = [cint1]
+    for idx in np.arange(SC_Integrations - 1):
+        integrations.append(copy(cintn))
+
+    integrations[-1].append(np.zeros(SC_DropFrames3, int) + frame_dict["drop"])
+    return integrations
+
+
+def get_plot_vectors(inte):
+    """
+    Helper function to provide plotting information for each frame to the `plot_integrations`
+    function.
+
+    Parameters
+    ----------
+    inte : array
+        The array of integer flags representing each frame in a single integration of exposure
+
+    Returns
+    -------
+    vectors : list of arrays
+        List of arrays specifying the plotting parameters for each individual frame
+    """
+    s = np.where(inte | frame_dict["reset"] == frame_dict["reset"])[0]
+    if len(s) > 0:
+        s = s[-1]
+        y = np.hstack(
+            [np.zeros(s + 1, dtype=int), np.arange(s + 1, len(inte), dtype=int) - s + 1]
+        )
+    else:
+        y = np.arange(0, len(inte), dtype=int)
+
+    cols = np.vstack(
+        [
+            inte | frame_dict["reset"] == frame_dict["reset"],
+            inte | frame_dict["read"] == frame_dict["read"],
+            inte | frame_dict["drop"] == frame_dict["drop"],
+        ]
+    ).T
+    return np.hstack([y[:, None], cols])
+
+
+def plot_nirda_integrations(
+    SC_Resets1,
+    SC_Resets2,
+    SC_DropFrames1,
+    SC_DropFrames2,
+    SC_DropFrames3,
+    SC_ReadFrames,
+    SC_Groups,
+    SC_Integrations,
+):
+    """
+    Function to plot the integrations of the NIRDA visually given values describing
+    the integration strategy.
+
+    Parameters
+    ----------
+    SC_Resets1 : int
+        Number of reset frames at the start of the first integration of exposure
+    SC_Resets2 : int
+        Number of resent frames at the start of 1 through n integrations of exposure
+    SC_DropFrames1 : int
+        Number of dropped frames after reset of any integration of exposure
+    SC_DropFrames2 : int
+        Number of dropped frames in every group of integrations of exposure except the last group
+    SC_DropFrames3 : int
+        Number of dropped frames in the last group of each integration of exposure
+    SC_ReadFrames : int
+        Number of frames read during each group of integration of exposure
+    SC_Groups : int
+        Number of groups per integration of exposure
+    SC_Integrations : int
+        Number of integrations per exposure
+    """
+    integrations = get_integrations(
+        SC_Resets1,
+        SC_Resets2,
+        SC_DropFrames1,
+        SC_DropFrames2,
+        SC_DropFrames3,
+        SC_ReadFrames,
+        SC_Groups,
+        SC_Integrations,
+    )
+    cadences = [
+        np.sum([(i == frame_dict["read"]).all() for i in inte if len(i) > 0])
+        for inte in integrations
+    ]
+    integrations = [np.hstack(idx) for idx in integrations]
+    dat = np.vstack([get_plot_vectors(inte) for inte in integrations])
+    with plt.style.context("seaborn-v0_8-white"):
+        fig, ax = plt.subplots(figsize=(np.max([5, len(dat) // 25]), 2))
+        ax.plot(dat[:, 0], ls="--", c="grey")
+        ax.scatter(
+            np.arange(len(dat))[dat[:, 1].astype(bool)],
+            dat[:, 0][dat[:, 1].astype(bool)],
+            c="k",
+            label="Reset",
+        )
+        ax.scatter(
+            np.arange(len(dat))[dat[:, 2].astype(bool)],
+            dat[:, 0][dat[:, 2].astype(bool)],
+            c="lightblue",
+            label="Frames",
+        )
+        ax.scatter(
+            np.arange(len(dat))[dat[:, 3].astype(bool)],
+            dat[:, 0][dat[:, 3].astype(bool)],
+            c="r",
+            label="Dropped Frames",
+            marker="x",
+        )
+        ax.set(
+            xlabel="Time",
+            ylabel="Counts",
+            xticks=[],
+            yticks=[],
+            title=(f"{SC_Integrations} Integrations, " +
+                   f"{SC_Groups} Groups\n{SC_ReadFrames} Read/group, " +
+                   f"{SC_DropFrames2} Drop/group\n{len(dat)} total reads, " +
+                   f"{np.sum(cadences)} total cadences"),
+        )
+        ax.legend(frameon=True, bbox_to_anchor=(1.1, 1.05))
+    return fig
+
+
+def save_to_FITS(
+    data: np.ndarray,
+    filename: str,
+    primary_kwds: dict,
+    image_kwds: dict,
+    roitable: bool = False,
+    roitable_kwds: dict | None = None,
+    roi_data: np.ndarray | None = None,
+    overwrite: bool = True,
+):
+    primary_hdu = fits.PrimaryHDU()
+
+    for key, value in primary_kwds.items():
+        primary_hdu.header[key] = value
+
+    image_hdu = fits.ImageHDU(data)
+
+    for key, value in image_kwds.items():
+        image_hdu.header[key] = value
+
+    hdu_list = [primary_hdu, image_hdu]
+
+    if roitable:
+        # table_hdu = fits.TableHDU(roi_data)
+        table_hdu = fits.table_to_hdu(roi_data)
+
+        for key, value in roitable_kwds.items():
+            table_hdu.header[key] = value
+
+        hdu_list.append(table_hdu)
+
+    hdul = fits.HDUList(hdu_list)
+
+    hdul.writeto(filename, overwrite=overwrite)

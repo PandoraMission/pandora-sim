@@ -2,38 +2,56 @@
 
 # Standard library
 import warnings
-from glob import glob
 
 # Third-party
 import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-from astropy.io import fits
 from matplotlib.patches import Rectangle
 from tqdm import tqdm
 
+from pandorasat.irdetector import NIRDetector as nirda
+
 from . import PACKAGEDIR
-from .detector import Detector
 from .psf import PSF, OutOfBoundsError
 from .utils import get_jitter
 from .wcs import get_wcs
 
 
-class NIRDetector(Detector):
-    def _setup(self):
-        self.shape = (2048, 512)
+class NIRDetector(nirda):
+    """Holds methods for simulating data from the NIR Detector on Pandora.
+
+    Attributes
+    ----------
+
+    ra: float
+        Right Ascension of the pointing
+    dec: float
+        Declination of the pointing
+    theta: float
+        Roll angle of the pointing
+    transpose_psf : bool
+        Transpose the LLNL input PSF file, i.e. rotate 90 degrees
+    """
+
+    def __init__(
+            self,
+            ra: u.Quantity,
+            dec: u.Quantity,
+            theta: u.Quantity,
+            transpose_psf: bool = False,
+            ):
+        self.ra, self.dec, self.theta, = (ra, dec, theta)
+
+        self.frame_dict = {"reset": 1, "read": 2, "drop": 4}
+
         """Some detector specific functions to run on initialization"""
         self.psf = PSF.from_file(
             f"{PACKAGEDIR}/data/pandora_nir_20220506.fits",
-            transpose=self.transpose_psf,
+            transpose=transpose_psf,
         )
         self.psf.blur(blur_value=(0.25 * u.pixel, 0.25 * u.pixel))
-        self.flat = fits.open(
-            np.sort(
-                np.atleast_1d(glob(f"{PACKAGEDIR}/data/flatfield_NIRDA*.fits"))
-            )[-1]
-        )[1].data
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self.wcs = get_wcs(
@@ -65,152 +83,140 @@ class NIRDetector(Detector):
         )
         self.trace_range = [-200, 100]
 
-    @property
-    def _dispersion_df(self):
-        return pd.read_csv(f"{PACKAGEDIR}/data/pixel_vs_wavelength.csv")
+    def world_to_pixel(self, ra, dec, distortion=True):
+        """Helper function. This function ensures we keep the row-major convention in pandora-sim.
 
-    @property
-    def pixel_read_time(self):
-        return 1e-5 * u.second / u.pixel
+        Parameters
+        ----------
+        ra : float
+            Right Ascension to be converted to pixel position.
+        dec : float
+            Declination to be converted to pixel position.
+        distortion : bool
+            Flag whether to account for the distortion in the WCS when converting from RA/Dec
+            to pixel position. Default is True.
 
-    @property
-    def frame_time(self):
-        return np.product(self.subarray_size) * u.pixel * self.pixel_read_time
-
-    @property
-    def dark(self):
-        return 1 * u.electron / u.second
-
-    @property
-    def read_noise(self):
-        raise ValueError("Not Set")
-
-    @property
-    def saturation_limit(self):
-        raise ValueError("Not Set")
-
-    @property
-    def non_linearity(self):
-        raise ValueError("Not Set")
-
-    # @property
-    # def frame_time(self):
-    #     return (
-    #         15
-    #         * u.microsecond
-    #         / u.pixel
-    #         * np.product(self.subarray_size)
-    #         * u.pixel
-    #     ).to(u.second)
-
-    def qe(self, wavelength):
+        Returns
+        -------
+        np.ndarray
+            Row and column positions of each provided RA and Dec.
         """
-        Calculate the quantum efficiency of the detector from the JWST NIRCam models.
+        coords = np.vstack(
+            [
+                ra.to(u.deg).value if isinstance(ra, u.Quantity) else ra,
+                dec.to(u.deg).value if isinstance(dec, u.Quantity) else dec,
+            ]
+        ).T
+        if distortion:
+            column, row = self.wcs.all_world2pix(coords, 0).T
+        else:
+            column, row = self.wcs.wcs_world2pix(coords, 0).T
+        return np.vstack([row, column])
 
-        Parameters:
-            wavelength (npt.NDArray): Wavelength in microns as `astropy.unit`
+    def pixel_to_world(self, row, column, distortion=True):
+        """Helper function. This function ensures we keep the row-major convention in pandora-sim.
 
-        Returns:
-            qe (npt.NDArray): Array of the quantum efficiency of the detector
+        Parameters
+        ----------
+        row : float
+            Pixel row position to be converted to sky coordinates.
+        column : float
+            Pixel column position to be converted to sky coordinates.
+        distortion : bool
+            Flag whether to account for the distortion in the WCS when converting from pixel position
+            to sky coordinates. Default is True.
 
+        Returns
+        -------
+        np.ndarray
+            RA and Dec of input pixel positions.
         """
-        if not hasattr(wavelength, "unit"):
-            raise ValueError("Pass a wavelength with units")
-        wavelength = np.atleast_1d(wavelength)
-        sw_coeffs = np.array([0.65830, -0.05668, 0.25580, -0.08350])
-        sw_exponential = 100.0
-        sw_wavecut_red = 1.65  # changed from 2.38 for Pandora
-        sw_wavecut_blue = 0.75  # new for Pandora
-        with np.errstate(invalid="ignore", over="ignore"):
-            sw_qe = (
-                sw_coeffs[0]
-                + sw_coeffs[1] * wavelength.to(u.micron).value
-                + sw_coeffs[2] * wavelength.to(u.micron).value ** 2
-                + sw_coeffs[3] * wavelength.to(u.micron).value ** 3
-            )
+        coords = np.vstack(
+            [
+                column.to(u.pixel).value
+                if isinstance(column, u.Quantity)
+                else column,
+                row.to(u.pixel).value if isinstance(row, u.Quantity) else row,
+            ]
+        ).T
+        if distortion:
+            return self.wcs.all_pix2world(coords, 0).T * u.deg
+        else:
+            return self.wcs.wcs_pix2world(coords, 0).T * u.deg
 
-            sw_qe = np.where(
-                wavelength.to(u.micron).value > sw_wavecut_red,
-                sw_qe
-                * np.exp(
-                    (sw_wavecut_red - wavelength.to(u.micron).value)
-                    * sw_exponential
-                ),
-                sw_qe,
-            )
+    def wavelength_to_pixel(self, wavelength):
+        """Provides position on the NIRDA that a given wavelength will be dispersed to.
 
-            sw_qe = np.where(
-                wavelength.to(u.micron).value < sw_wavecut_blue,
-                sw_qe
-                * np.exp(
-                    -(sw_wavecut_blue - wavelength.to(u.micron).value)
-                    * (sw_exponential / 1.5)
-                ),
-                sw_qe,
-            )
-        sw_qe[sw_qe < 1e-5] = 0
-        return sw_qe * u.DN / u.photon
+        Parameters
+        ----------
+        wavelength : np.ndarray
+            Wavelengths to be converted in microns.
 
-    def throughput(self, wavelength):
-        return wavelength.value**0 * 0.61
+        Returns
+        -------
+        pixel : np.ndarray
+            Pixel position that wavelengths are dispersed to on NIRDA.
+        """
+        if not hasattr(self, "_dispersion_df"):
+            raise ValueError("No wavelength dispersion information")
+        df = self._dispersion_df
+        return np.interp(
+            wavelength,
+            np.asarray(df.Wavelength) * u.micron,
+            np.asarray(df.Pixel) * u.pixel,
+            left=np.nan,
+            right=np.nan,
+        )
 
-    # def wcs(self, target_ra, target_dec):
-    #     # This is where we'd build or use a WCS.
-    #     # Here we're assuming no distortions, no rotations.
-    #     hdu = fits.PrimaryHDU()
-    #     hdu.header["CTYPE1"] = "RA---TAN"
-    #     hdu.header["CTYPE2"] = "DEC--TAN"
-    #     hdu.header["CRVAL1"] = target_ra
-    #     hdu.header["CRVAL2"] = target_dec
-    #     hdu.header["CRPIX1"] = 2048 - 1024 + 40  # + 0.5
-    #     hdu.header["CRPIX2"] = 2048  # - 0.5
-    #     hdu.header["NAXIS1"] = self.naxis1.value
-    #     hdu.header["NAXIS2"] = self.naxis2.value
-    #     hdu.header["CDELT1"] = -self.pixel_scale.to(u.deg / u.pixel).value
-    #     hdu.header["CDELT2"] = self.pixel_scale.to(u.deg / u.pixel).value
-    #     # We're not doing any rotation and scaling right now... but those go in PC1_1, PC1_2, PC1_2, PC2_2
-    #     with warnings.catch_warnings():
-    #         warnings.simplefilter("ignore")
-    #         wcs = WCS(hdu.header)
-    #     return wcs
+    def pixel_to_wavelength(self, pixel):
+        """Provides the wavelength that is dispersed to a given pixel position on NIRDA.
 
-    # def wcs(
-    #     self,
-    #     target_ra: u.Quantity,
-    #     target_dec: u.Quantity,
-    #     theta: u.Quantity,
-    #     distortion: bool = True,
-    # ):
-    #     """Get the World Coordinate System for a detector
+        Parameters
+        ----------
+        pixel : np.ndarray
+            Pixel positions.
 
-    #     Parameters:
-    #     -----------
-    #     target_ra: astropy.units.Quantity
-    #         The target RA in degrees
-    #     target_dec: astropy.units.Quantity
-    #         The target Dec in degrees
-    #     theta: astropy.units.Quantity
-    #         The observatory angle in degrees
-    #     distortion_file: str
-    #         Optional file path to a distortion CSV file. See `wcs.read_distortion_file`
-    #     """
-    #     with warnings.catch_warnings():
-    #         warnings.simplefilter("ignore")
-    #         wcs = get_wcs(
-    #             self,
-    #             target_ra=target_ra,
-    #             target_dec=target_dec,
-    #             theta=theta,
-    #             crpix1=2048 - 40,
-    #             distortion_file=f"{PACKAGEDIR}/data/fov_distortion.csv"
-    #             if distortion
-    #             else None,
-    #         )
-    #     return wcs
+        Returns
+        -------
+        wavelength : float or np.nadarray
+            Wavelengths dispersed to the given NIRDA pixels.
+        """
+        if not hasattr(self, "_dispersion_df"):
+            raise ValueError("No wavelength dispersion information")
+        df = self._dispersion_df
+        return np.interp(
+            pixel,
+            np.asarray(df.Pixel) * u.pixel,
+            np.asarray(df.Wavelength) * u.micron,
+            left=np.nan,
+            right=np.nan,
+        )
 
     def diagnose(
-        self, n=4, npixels=20, image_type="psf", temperature=10 * u.deg_C
+        self, n=4, npixels=20, image_type="psf", temperature=-10 * u.deg_C
     ):
+        """Plots diagnostic plots of the NIRDA PSF and PRF as they appear on the detector across
+        multiple wavelengths.
+
+        Parameters
+        ----------
+        n : int
+            Determines number of subplots (and therefore number of wavelengths to sample) will be
+            plotted. n x n plots will be plotted in a square arrangement. Default is 4.
+        npixels : int
+            Number of pixels to plot in each subplot. Each subplot will be npixels x npixels.
+            Default is 20.
+        image_type : str
+            Specifies whether the PSF or PRF will be plotted. Options are 'psf' or 'prf'. Default
+            is 'psf'.
+        temperature : float
+            Temperature of the detector in degrees Celsius. Default is 10.
+
+        Returns
+        -------
+        fig : plt.figure
+            The output figure.
+        """
         wavs = np.linspace(
             self.psf.wavelength1d.min(), self.psf.wavelength1d.max(), n**2
         )
@@ -276,13 +282,22 @@ class NIRDetector(Detector):
 
         Parameters
         ----------
-        target: ps.target.Target
-            A target with the method to get an SED as a function of wavelength
-        pixel_resolution: float
-            The number of subpixels to use when building the trace.
-            Higher numbers will take longer to calculate.
-        target_center: tuple
-            Center of the target within the subarray.
+        wavelength : np.ndarray
+            Wavelengths to get trace for.
+        spectrum : np.ndarray
+            Flux values at each wavelength value.
+        pixel_resolution : float
+            The number of subpixels to use when building the trace. Higher numbers will
+            take longer to calculate. Default is 2.
+        target_center : tuple
+            Center of the target within the subarray. Default is (250, 40).
+        temperature : u.Quantity
+            Temperature of the detector in Celsius. Default is -10.
+
+        Returns
+        -------
+        trace : np.ndarray
+            Counts values across NIRDA.
         """
         dp = 1 / pixel_resolution
         pix = np.arange(-200, 100, dp) + dp / 2
@@ -362,15 +377,30 @@ class NIRDetector(Detector):
         temperature=-10 * u.deg_C,
         seed=None,
     ):
-        """Calculates the frames  from a source in a subarray
+        """Calculates the frames from a source in a subarray.
 
         Parameters
         ----------
-        pixel_resolution: float
-            The number of subpixels to use when building the trace.
-            Higher numbers will take longer to calculate.
+        wavelength : np.ndarray
+            Wavelengths of the target that the frames will be evaluated at.
+        spectrum : np.ndarray
+            Flux of the target at the wavelengths specified.
+        nframes : int
+            Number of frames to be coadded Default is 20.
         target_center: tuple
-            Center of the target within the subarray.
+            Center of the target within the subarray. Default is (40, 250).
+        pixel_resolution: float
+            The number of subpixels to use when building the trace. Higher numbers
+            will take longer to calculate. Default is 2
+        temperature : u.Quantity
+            Temperature of the detector in Celsius. Default is -10.
+        seed : int or None
+            Seed value to be passed tot the get_jitter function.
+
+        Returns
+        -------
+        traces : np.ndarray
+            Coadded frame of NIRDA observations of the target.
         """
         x1, y1 = np.asarray(get_jitter(nframes=nframes, seed=seed))
         traces = (
@@ -418,6 +448,32 @@ class NIRDetector(Detector):
         temperature=-10 * u.deg_C,
         seed=None,
     ):
+        """Integrates the frames of a simulated NIRDA observation and performs
+        Fowler sampling on them.
+
+        Parameters
+        ----------
+        wavelength : np.ndarray
+            Wavelengths of the target that the frames will be evaluated at.
+        spectrum : np.ndarray
+            Flux of the target at the wavelengths specified.
+        nframes : int
+            Number of frames used to generate the integration.
+        target_center: tuple
+            Center of the target within the subarray. Default is (40, 250).
+        pixel_resolution: float
+            The number of subpixels to use when building the trace. Higher numbers
+            will take longer to calculate. Default is 2
+        temperature : u.Quantity
+            Temperature of the detector in Celsius. Default is -10.
+        seed : int or None
+            Seed value to be passed tot the get_jitter function.
+
+        Returns
+        -------
+        integration : np.ndarray
+            Fowler-sampled integration of NIRDA frames.
+        """
         if nframes < 8:
             raise ValueError("Too few frames to do Fowler sampling.")
         frames = self.get_frames(
@@ -433,10 +489,6 @@ class NIRDetector(Detector):
         # Fowler sampling
         integration = frames[-4:].mean(axis=0) - frames[:4].mean(axis=0)
         return integration
-
-    def apply_gain(self, values: u.Quantity):
-        """Applies a single gain value"""
-        return values * 0.5 * u.electron / u.DN
 
     def get_background_light_estimate(self, ra, dec, duration, shape=None):
         """Placeholder, will estimate the background light at different locations?
@@ -456,15 +508,23 @@ class NIRDetector(Detector):
         return bkg
 
     def get_trace_positions(self, ra, dec, pixel_resolution=2, plot=False):
-        """Finds the position of a trace, accounting for WCS distortions
+        """Finds the position of a trace, accounting for WCS distortions.
 
         Parameters
         ----------
-
+        ra : float
+            Right Ascension of the target in decimal degrees.
+        dec : float
+            Declination of the target in decimal degrees.
+        pixel_resolution : int
+            Resolution of the pixel position sampling. The pixel positions are sampled as
+            1 / pixel_resoultion so higher values for pixel_resolution will result in higher
+            resolution.
 
         Returns
         -------
-
+        trace : array
+            Pixel positions of trace.
 
         """
 
@@ -537,8 +597,8 @@ class NIRDetector(Detector):
         sub_res: int = 3,
     ):
         """Returns a function to evaluate the trace on the IR channel -FAST-
-
-        This trace will be fixed to the WCS solution at the given RA and Dec, but can be evaluated anywhere on the detector.
+        This trace will be fixed to the WCS solution at the given RA and Dec,
+        but can be evaluated anywhere on the detector.
 
         Parameters
         ----------
@@ -548,11 +608,13 @@ class NIRDetector(Detector):
         dec: astropy.units.Quantity
             The Declination to build the WCS solution at in degrees
         npix: int
-            The number of PRFs to evaluate per pixel. Higher numbers are slower, but more accurate.
+            The number of PRFs to evaluate per pixel. Higher numbers are slower, but more
+            accurate.
         temperature: astropy.units.Quantity
             Temperature to use for the PRF in degrees C
         sub_res: int
-            The number of sub-pixel resolution elements in the returned PRF model. Higher numbers are slower, but more accurate.
+            The number of sub-pixel resolution elements in the returned PRF model. Higher
+            numbers are slower, but more accurate.
 
         Returns
         -------
@@ -691,9 +753,26 @@ class NIRDetector(Detector):
         return wav_edges, fasttrace
 
     def get_integrated_spectrum(self, wav, spec, wav_edges, plot=False):
-        """Given an input spectrum will get the integrated spectrum
+        """Given an input spectrum will get the integrated spectrum. Pass wav_edges
+        to define the bounds of the integration.
 
-        Pass wav_edges to define the bounds of the integration"""
+        Parameters
+        ----------
+        wav : np.ndarray
+            Wavelength values of the input spectrum
+        spec : np.ndarray
+            Flux density of the input spectrum at each wavelength
+        wav_edges : np.ndarray
+            A two-element array containing the minimum and maximum wavelengths to
+            integrate between.
+        plot : bool
+            Flag to specify whether to plot the integrated spectrum. Default is False.
+
+        Returns
+        -------
+        integral : float
+            Integrated flux density
+        """
         spectrum = spec.to(u.erg / (u.micron * u.second * u.cm**2)).value
         sensitivity = self.sensitivity(wav).value
         wavelength = wav.to(u.micron).value
@@ -726,21 +805,3 @@ class NIRDetector(Detector):
             )
         integral = integral * unit_convert
         return integral
-
-    # def get_sky_catalog(self, jmagnitude_range=(-3, 18)):
-    #     cat = get_sky_catalog(
-    #         self.ra,
-    #         self.dec,
-    #         columns="ra, dec, Teff, logg, jmag",
-    #         jmagnitude_range=jmagnitude_range,
-    #     )
-    #     cat[["nir_row", "nir_column"]] = self.world_to_pixel(cat.ra, cat.dec).T
-    #     r1 = cat.nir_row - self.subarray_corner[0]
-    #     c1 = cat.nir_column - self.subarray_corner[1]
-    #     k = (
-    #         (r1 > -self.trace_range[1])
-    #         & (r1 < (self.subarray_size[0] - self.trace_range[0]))
-    #         & (c1 > -5)
-    #         & (c1 < (self.subarray_size[1] + 5))
-    #     )
-    #     return cat[k].reset_index(drop=True)

@@ -1,3 +1,13 @@
+# 0.5.1
+- Added in ability to save VISDA FFIs and ROIs as FITS files
+- Updated the intro-to-pandorasim.ipynb tutorial
+- Added FFIs and ROIs as properties of PandoraSim class
+
+# 0.5.0
+- Integration with new standalone pandora-sat package
+- Addition of the ability to plot a NIRDA integration scheme
+- Updated docstrings and cleaned unnecessary comments
+
 # 0.4.1
 - Renaming to PandoraSim, PandoraSat will be broken out
 

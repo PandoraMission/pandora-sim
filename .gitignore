@@ -3,6 +3,8 @@ src/pandorasim/data/old
 src/pandorasim/data/pandora_*_20220506.*
 src/pandorasim/data/pandora_*_20210602.*
 src/pandorasim/data/flatfield*.fits
+docs/playtime.ipynb
+docs/*.fits
 
 # Mac things
 .DS_Store
@@ -54,3 +56,6 @@ __pycache__/
 *.py[cod]
 *$py.class
 smex2024
+
+# VSC
+.vscode/
