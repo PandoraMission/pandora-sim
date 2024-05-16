@@ -33,9 +33,7 @@ class Target(object):
     coord: SkyCoord = None
 
     def __post_init__(self):
-        self.ra, self.dec = u.Quantity(self.ra, u.deg), u.Quantity(
-            self.dec, u.deg
-        )
+        self.ra, self.dec = u.Quantity(self.ra, u.deg), u.Quantity(self.dec, u.deg)
         self.teff = u.Quantity(self.teff, u.K)
         self.logg = u.Quantity(self.logg)
         self._wavelength, self._spectrum = get_phoenix_model(
@@ -61,9 +59,7 @@ class Target(object):
             coord = SkyCoord.from_name(coord)
         elif not isinstance(coord, SkyCoord):
             raise ValueError("`coord` must be a `SkyCoord` or a name string.")
-        cat = get_sky_catalog(
-            coord.ra, coord.dec, radius=5 * u.arcsecond, limit=1
-        )
+        cat = get_sky_catalog(coord.ra, coord.dec, radius=5 * u.arcsecond, limit=1)
         if name is None:
             name = cat["source_id"][0]
         return Target(
@@ -100,9 +96,9 @@ class Target(object):
                         "TIC",
                     ]
                 )
-                .query_object(
-                    coord, catalog="IV/39/tic82", radius=0.1 * u.arcsecond
-                )[0][[*list(_KEY_DICT.keys()), "Dist", "pmRA", "pmDE", "TIC"]]
+                .query_object(coord, catalog="IV/39/tic82", radius=0.1 * u.arcsecond)[
+                    0
+                ][[*list(_KEY_DICT.keys()), "Dist", "pmRA", "pmDE", "TIC"]]
                 .to_pandas()
                 .iloc[0]
             )
@@ -117,9 +113,9 @@ class Target(object):
                         "TIC",
                     ]
                 )
-                .query_region(
-                    coord, catalog="IV/39/tic82", radius=1 * u.arcsecond
-                )[0][[*list(_KEY_DICT.keys()), "Dist", "pmRA", "pmDE", "TIC"]]
+                .query_region(coord, catalog="IV/39/tic82", radius=1 * u.arcsecond)[0][
+                    [*list(_KEY_DICT.keys()), "Dist", "pmRA", "pmDE", "TIC"]
+                ]
                 .to_pandas()
                 .iloc[0]
             )
@@ -127,9 +123,7 @@ class Target(object):
         else:
             raise ValueError("`coord` must be a `SkyCoord` or a name string.")
 
-        kwargs = {
-            _KEY_DICT[k]: viz_dat[idx] for idx, k in enumerate(_KEY_DICT)
-        }
+        kwargs = {_KEY_DICT[k]: viz_dat[idx] for idx, k in enumerate(_KEY_DICT)}
         kwargs["coord"] = SkyCoord(
             kwargs["ra"] * u.deg,
             kwargs["dec"] * u.deg,
@@ -137,9 +131,7 @@ class Target(object):
             pm_ra_cosdec=viz_dat[-3] * u.mas / u.year
             if np.isfinite(viz_dat[-3])
             else 0,
-            pm_dec=viz_dat[-2] * u.mas / u.year
-            if np.isfinite(viz_dat[-2])
-            else 0,
+            pm_dec=viz_dat[-2] * u.mas / u.year if np.isfinite(viz_dat[-2]) else 0,
             obstime=Time(2000, format="jyear"),
         ).apply_space_motion(Time.now())
         # overwrite to current RA, Dec
@@ -153,9 +145,7 @@ class Target(object):
             phase = (
                 time - self.planets[planet]["pl_tranmid"].to(u.day).value
             ) % self.planets[planet]["pl_orbper"].to(u.day).value
-            mask = (
-                phase < self.planets[planet]["pl_trandur"].to(u.day).value / 2
-            ) | (
+            mask = (phase < self.planets[planet]["pl_trandur"].to(u.day).value / 2) | (
                 phase
                 > (
                     self.planets[planet]["pl_orbper"].to(u.day).value
@@ -163,8 +153,7 @@ class Target(object):
                 )
             )
             lc += -np.nan_to_num(
-                mask.astype(float)
-                * (self.planets[planet]["pl_trandep"].value / 100)
+                mask.astype(float) * (self.planets[planet]["pl_trandep"].value / 100)
             )
         return lc + 1
 
@@ -178,9 +167,7 @@ class Target(object):
         """
         vizier_url = f"https://vizier.cds.unistra.fr/viz-bin/sed?-c={self.name.replace(' ', '%20')}&-c.rs={radius}"
         df = (
-            votable.parse(download_file(vizier_url))
-            .get_first_table()
-            .to_table()
+            votable.parse(download_file(vizier_url)).get_first_table().to_table()
         )  # .to_pandas()
         df = df[df["sed_flux"] / df["sed_eflux"] > 5]
         if len(df) == 0:

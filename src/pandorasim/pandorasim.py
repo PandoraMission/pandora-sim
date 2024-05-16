@@ -8,11 +8,10 @@ import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from astropy.table import Table
 from astropy.time import Time
 from matplotlib.patches import PathPatch
 from matplotlib.path import Path
-from astropy.table import Table
-
 from pandorasat.hardware import Hardware
 from pandorasat.orbit import Orbit
 
@@ -87,8 +86,7 @@ class PandoraSim(object):
 
         nints = (duration.to(u.s) / self.VISDA.integration_time).value
         self.VISDA.time = (
-            self.obstime.jd
-            + np.arange(0, nints) / nints * duration.to(u.day).value
+            self.obstime.jd + np.arange(0, nints) / nints * duration.to(u.day).value
         )
         self.VISDA.rowj, self.VISDA.colj, self.VISDA.thetaj = (  # noqa
             np.interp(self.VISDA.time, self.jitter.time, self.jitter.rowj),
@@ -125,9 +123,7 @@ class PandoraSim(object):
             ).T,
             columns=["time", "rowj", "colj", "thetaj"],
         )
-        self.jitter.time = (
-            self.jitter.time * (u.second).to(u.day)
-        ) + self.obstime.jd
+        self.jitter.time = (self.jitter.time * (u.second).to(u.day)) + self.obstime.jd
 
     def get_sky_catalog(
         self,
@@ -156,14 +152,7 @@ class PandoraSim(object):
         radius = np.min(
             [
                 (2 * self.VISDA.fieldstop_radius.to(u.deg).value ** 2) ** 0.5,
-                (
-                    2
-                    * (
-                        (2048 * u.pix * self.VISDA.pixel_scale).to(u.deg).value
-                        / 2
-                    )
-                    ** 2
-                )
+                (2 * ((2048 * u.pix * self.VISDA.pixel_scale).to(u.deg).value / 2) ** 2)
                 ** 0.5,
             ]
         )
@@ -172,12 +161,8 @@ class PandoraSim(object):
         cat = get_sky_catalog(self.ra, self.dec, radius=radius * u.deg, **kwargs)
 
         ra, dec, mag = cat["coords"].ra.deg, cat["coords"].dec.deg, cat["bmag"]
-        vis_pix_coords = self.VISDA.world_to_pixel(
-            ra, dec, distortion=distortion
-        )
-        nir_pix_coords = self.NIRDA.world_to_pixel(
-            ra, dec, distortion=distortion
-        )
+        vis_pix_coords = self.VISDA.world_to_pixel(ra, dec, distortion=distortion)
+        nir_pix_coords = self.NIRDA.world_to_pixel(ra, dec, distortion=distortion)
         k = (
             np.abs(vis_pix_coords[0] - self.VISDA.shape[0] / 2)
             < self.VISDA.shape[0] / 2
@@ -265,9 +250,7 @@ class PandoraSim(object):
             Catalog of stars contained within the NIR detector for the given pointing.
         """
         cat = self.SkyCatalog.copy()
-        cat[["nir_row", "nir_column"]] = self.NIRDA.world_to_pixel(
-            cat.ra, cat.dec
-        ).T
+        cat[["nir_row", "nir_column"]] = self.NIRDA.world_to_pixel(cat.ra, cat.dec).T
         r1 = cat.nir_row - self.NIRDA.subarray_corner[0]
         c1 = cat.nir_column - self.NIRDA.subarray_corner[1]
         k = (
@@ -292,9 +275,9 @@ class PandoraSim(object):
             detector. Currently only includes the target star and eight of the brightest background
             stars.
         """
-        dist = self.SkyCatalog["ang_sep"] > (
-            self.VISDA.pixel_scale * 50 * u.pixel
-        ).to(u.deg)
+        dist = self.SkyCatalog["ang_sep"] > (self.VISDA.pixel_scale * 50 * u.pixel).to(
+            u.deg
+        )
         ruwe = self.SkyCatalog["ruwe"] < 1.2
         edge = (
             (self.SkyCatalog["vis_row"] > 50)
@@ -310,8 +293,7 @@ class PandoraSim(object):
         )
         corners = np.vstack(
             [
-                np.asarray(cat.vis_row, dtype=int)
-                - self.VISDA.subarray_size[0] // 2,
+                np.asarray(cat.vis_row, dtype=int) - self.VISDA.subarray_size[0] // 2,
                 np.asarray(cat.vis_column, dtype=int)
                 - self.VISDA.subarray_size[1] // 2,
             ]
@@ -320,10 +302,8 @@ class PandoraSim(object):
             [
                 np.asarray(
                     [
-                        self.VISDA.shape[0] // 2
-                        - self.VISDA.subarray_size[0] // 2,
-                        self.VISDA.shape[1] // 2
-                        - self.VISDA.subarray_size[1] // 2,
+                        self.VISDA.shape[0] // 2 - self.VISDA.subarray_size[0] // 2,
+                        self.VISDA.shape[1] // 2 - self.VISDA.subarray_size[1] // 2,
                     ]
                 ),
                 corners,
@@ -497,7 +477,7 @@ class PandoraSim(object):
             #     include_noise=include_noise,
             #     #            freeze_dimensions=freeze_dimensions,
             # )
-            raise AttributeError('Please create FFIs first with .get_FFIs() command!')
+            raise AttributeError("Please create FFIs first with .get_FFIs() command!")
 
         with plt.style.context(PANDORASTYLE):
             vmin = kwargs.pop("vmin", self.VISDA.bias.value)
@@ -552,37 +532,47 @@ class PandoraSim(object):
 
     def save_visda(
         self,
-        outfile: str = 'pandora_'+Time.now().strftime('%Y-%m-%dT%H:%M:%S')+'_l1_visda.fits',
+        outfile: str = "pandora_"
+        + Time.now().strftime("%Y-%m-%dT%H:%M:%S")
+        + "_l1_visda.fits",
         rois: bool = False,
         overwrite: bool = True,
     ):
         """Function to save FFIs in the FITS format"""
         if not hasattr(self, "ffis"):
-            raise AttributeError('Please create FFIs first with .get_FFIs() command!')
+            raise AttributeError("Please create FFIs first with .get_FFIs() command!")
 
-        corstime = int(np.floor((self.obstime - Time("2000-01-01T12:00:00", scale='utc')).sec))
+        corstime = int(
+            np.floor((self.obstime - Time("2000-01-01T12:00:00", scale="utc")).sec)
+        )
         finetime = int(corstime % 1 * 10**9 // 1)
 
         primary_kwds = {
-            'EXTNAME': ('PRIMARY', 'name of extension'),
-            'NEXTEND': (2, 'number of standard extensions'),
-            'SIMDATA': (True, 'simulated data'),
-            'SCIDATA': (False, 'science data'),
-            'TELESCOP': ('NASA Pandora', 'telescope'),
-            'INSTRMNT': ('VISDA', 'instrument'),
-            'CREATOR': ('Pandora DPC', 'creator of this product'),
-            'CRSOFTV': ('v'+str(__version__), 'creator software version'),
-            'TARG_RA': (self.ra.value, 'target right ascension [deg]'),
-            'TARG_DEC': (self.dec.value, 'target declination [deg]'),
-            'FRMSREQD': (self.ffi_nframes, 'number of frames requested'),
-            'FRMSCLCT': (self.ffi_nframes, 'number of frames collected'),
-            'NUMCOAD': (1, 'number of frames coadded'),
-            'FRMTIME': (self.ffi_nreads * self.VISDA.integration_time.value, 'time in each frame [s]'),
-            'EXPDELAY': (-1, 'exposure time delay [ms]'),
-            'RICEX': (-1, 'bit noise parameter for Rice compression'),
-            'RICEY': (-1, 'bit noise parameter for Rice compression'),
-            'CORSTIME': (corstime, 'seconds since the TAI Epoch (12PM Jan 1, 2000)'),
-            'FINETIME': (finetime, 'nanoseconds added to CORSTIME seconds'),
+            "EXTNAME": ("PRIMARY", "name of extension"),
+            "NEXTEND": (2, "number of standard extensions"),
+            "SIMDATA": (True, "simulated data"),
+            "SCIDATA": (False, "science data"),
+            "TELESCOP": ("NASA Pandora", "telescope"),
+            "INSTRMNT": ("VISDA", "instrument"),
+            "CREATOR": ("Pandora DPC", "creator of this product"),
+            "CRSOFTV": ("v" + str(__version__), "creator software version"),
+            "TARG_RA": (self.ra.value, "target right ascension [deg]"),
+            "TARG_DEC": (self.dec.value, "target declination [deg]"),
+            "FRMSREQD": (self.ffi_nframes, "number of frames requested"),
+            "FRMSCLCT": (self.ffi_nframes, "number of frames collected"),
+            "NUMCOAD": (1, "number of frames coadded"),
+            "FRMTIME": (
+                self.ffi_nreads * self.VISDA.integration_time.value,
+                "time in each frame [s]",
+            ),
+            "EXPDELAY": (-1, "exposure time delay [ms]"),
+            "RICEX": (-1, "bit noise parameter for Rice compression"),
+            "RICEY": (-1, "bit noise parameter for Rice compression"),
+            "CORSTIME": (
+                corstime,
+                "seconds since the TAI Epoch (12PM Jan 1, 2000)",
+            ),
+            "FINETIME": (finetime, "nanoseconds added to CORSTIME seconds"),
         }
 
         if rois:
@@ -597,46 +587,60 @@ class PandoraSim(object):
             padding = np.zeros((next_square - n_arrs, frames, nrows, ncols), dtype=int)
             subarrays = np.append(subarrays, padding, axis=0)
 
-            image_data = (subarrays.reshape(frames, sq_sides, sq_sides, nrows, ncols)
-                          .swapaxes(2, 3)
-                          .reshape(frames, sq_sides*nrows, sq_sides*ncols))
+            image_data = (
+                subarrays.reshape(frames, sq_sides, sq_sides, nrows, ncols)
+                .swapaxes(2, 3)
+                .reshape(frames, sq_sides * nrows, sq_sides * ncols)
+            )
 
             roi_data = Table(self.VISDA.corners)
 
             roitable_kwds = {
-                'NAXIS': (2, 'number of array dimensions'),
-                'NAXIS1': (len(self.VISDA.corners[0]), 'length of dimension 1'),
-                'NAXIS2': (len(self.VISDA.corners), 'length of dimension 2'),
-                'PCOUNT': (0, 'number of group parameters'),
-                'GCOUNT': (1, 'number of groups'),
-                'TFIELDS': (2, 'number of table fields'),
-                'TTYPE1': ('Column', 'table field 1 type'),
-                'TFORM1': ('I21', 'table field 1 format'),
-                'TUNIT1': ('pix', 'table field 1 unit'),
-                'TBCOL1': (1, ''),
-                'TTYPE2': ('Row', 'table field 2 type'),
-                'TFORM2': ('I21', 'table field 2 format'),
-                'TUNIT2': ('pix', 'table field 2 unit'),
-                'TBCOL2': (22, ''),
-                'EXTNAME': ('ROITABLE', 'name of extension'),
-                'NROI': (len(self.VISDA.corners), 'number of regions of interest'),
-                'ROISTRTX': (-1, 'region of interest origin position in column'),
-                'ROISTRTY': (-1, 'region of interest origin position in row'),
-                'ROISIZEX': (-1, 'region of interest size in column'),
-                'ROISIZEY': (-1, 'region of interest size in row'),
+                "NAXIS": (2, "number of array dimensions"),
+                "NAXIS1": (
+                    len(self.VISDA.corners[0]),
+                    "length of dimension 1",
+                ),
+                "NAXIS2": (len(self.VISDA.corners), "length of dimension 2"),
+                "PCOUNT": (0, "number of group parameters"),
+                "GCOUNT": (1, "number of groups"),
+                "TFIELDS": (2, "number of table fields"),
+                "TTYPE1": ("Column", "table field 1 type"),
+                "TFORM1": ("I21", "table field 1 format"),
+                "TUNIT1": ("pix", "table field 1 unit"),
+                "TBCOL1": (1, ""),
+                "TTYPE2": ("Row", "table field 2 type"),
+                "TFORM2": ("I21", "table field 2 format"),
+                "TUNIT2": ("pix", "table field 2 unit"),
+                "TBCOL2": (22, ""),
+                "EXTNAME": ("ROITABLE", "name of extension"),
+                "NROI": (
+                    len(self.VISDA.corners),
+                    "number of regions of interest",
+                ),
+                "ROISTRTX": (
+                    -1,
+                    "region of interest origin position in column",
+                ),
+                "ROISTRTY": (-1, "region of interest origin position in row"),
+                "ROISIZEX": (-1, "region of interest size in column"),
+                "ROISIZEY": (-1, "region of interest size in row"),
             }
         else:
             image_data = self.ffis
 
         image_kwds = {
-            'NAXIS': (3, 'number of array dimensions'),
-            'NAXIS1': (image_data.shape[1], 'first axis size'),  # might need to change these
-            'NAXIS2': (image_data.shape[2], 'second axis size'),
-            'NAXIS3': (image_data.shape[0], 'third axis size'),
-            'EXTNAME': ('SCIENCE', 'extension name'),
-            'TTYPE1': ('COUNTS', 'data title: raw pixel counts'),
-            'TFORM1': ('J', 'data format: images of unsigned 32-bit integers'),
-            'TUNIT1': ('count', 'data units: count'),
+            "NAXIS": (3, "number of array dimensions"),
+            "NAXIS1": (
+                image_data.shape[1],
+                "first axis size",
+            ),  # might need to change these
+            "NAXIS2": (image_data.shape[2], "second axis size"),
+            "NAXIS3": (image_data.shape[0], "third axis size"),
+            "EXTNAME": ("SCIENCE", "extension name"),
+            "TTYPE1": ("COUNTS", "data title: raw pixel counts"),
+            "TFORM1": ("J", "data format: images of unsigned 32-bit integers"),
+            "TUNIT1": ("count", "data units: count"),
         }
 
         if rois:
@@ -648,6 +652,13 @@ class PandoraSim(object):
                 roitable=True,
                 roitable_kwds=roitable_kwds,
                 roi_data=roi_data,
-                overwrite=overwrite)
+                overwrite=overwrite,
+            )
         else:
-            save_to_FITS(image_data, outfile, primary_kwds, image_kwds, overwrite=overwrite)
+            save_to_FITS(
+                image_data,
+                outfile,
+                primary_kwds,
+                image_kwds,
+                overwrite=overwrite,
+            )

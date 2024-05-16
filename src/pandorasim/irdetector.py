@@ -8,9 +8,8 @@ import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import Rectangle
-from tqdm import tqdm
-
 from pandorasat.irdetector import NIRDetector as nirda
+from tqdm import tqdm
 
 from . import PACKAGEDIR
 from .psf import PSF, OutOfBoundsError
@@ -35,13 +34,17 @@ class NIRDetector(nirda):
     """
 
     def __init__(
-            self,
-            ra: u.Quantity,
-            dec: u.Quantity,
-            theta: u.Quantity,
-            transpose_psf: bool = False,
-            ):
-        self.ra, self.dec, self.theta, = (ra, dec, theta)
+        self,
+        ra: u.Quantity,
+        dec: u.Quantity,
+        theta: u.Quantity,
+        transpose_psf: bool = False,
+    ):
+        (
+            self.ra,
+            self.dec,
+            self.theta,
+        ) = (ra, dec, theta)
 
         self.frame_dict = {"reset": 1, "read": 2, "drop": 4}
 
@@ -63,8 +66,8 @@ class NIRDetector(nirda):
                 distortion_file=f"{PACKAGEDIR}/data/fov_distortion.csv",
             )
 
-        # ROW COLUMN JUST LIKE PYTHON
-        self.subarray_size = (400, 80)
+        # # ROW COLUMN JUST LIKE PYTHON
+        # self.subarray_size = (400, 80)
         self.subarray_center = (self.wcs.wcs.crpix[1], self.wcs.wcs.crpix[0])
         crpix = self.wcs.wcs.crpix
         self.subarray_corner = (
@@ -73,12 +76,8 @@ class NIRDetector(nirda):
         )
         # COLUMN, ROW
         self.subarray_row, self.subarray_column = np.meshgrid(
-            crpix[1]
-            + np.arange(self.subarray_size[0])
-            - self.subarray_size[0] / 2,
-            crpix[0]
-            + np.arange(self.subarray_size[1])
-            - self.subarray_size[1] / 2,
+            crpix[1] + np.arange(self.subarray_size[0]) - self.subarray_size[0] / 2,
+            crpix[0] + np.arange(self.subarray_size[1]) - self.subarray_size[1] / 2,
             indexing="ij",
         )
         self.trace_range = [-200, 100]
@@ -133,9 +132,7 @@ class NIRDetector(nirda):
         """
         coords = np.vstack(
             [
-                column.to(u.pixel).value
-                if isinstance(column, u.Quantity)
-                else column,
+                column.to(u.pixel).value if isinstance(column, u.Quantity) else column,
                 row.to(u.pixel).value if isinstance(row, u.Quantity) else row,
             ]
         ).T
@@ -192,9 +189,7 @@ class NIRDetector(nirda):
             right=np.nan,
         )
 
-    def diagnose(
-        self, n=4, npixels=20, image_type="psf", temperature=-10 * u.deg_C
-    ):
+    def diagnose(self, n=4, npixels=20, image_type="psf", temperature=-10 * u.deg_C):
         """Plots diagnostic plots of the NIRDA PSF and PRF as they appear on the detector across
         multiple wavelengths.
 
@@ -240,9 +235,7 @@ class NIRDetector(nirda):
                 )
             #                ax[idx, jdx].set(xticklabels=[], yticklabels=[])
             elif image_type.lower() == "prf":
-                y, x, f = self.psf.prf(
-                    [wavs[ndx], temperature], location=[0, 0]
-                )
+                y, x, f = self.psf.prf([wavs[ndx], temperature], location=[0, 0])
             im = ax[idx, jdx].pcolormesh(
                 x,
                 y,
@@ -265,9 +258,7 @@ class NIRDetector(nirda):
             ax[idx, 0].set(ylabel="Pixels")
         cbar = plt.colorbar(im, ax=ax)
         cbar.set_label("Normalized PSF Value")
-        fig.suptitle(
-            f"NIRDA {image_type.upper()} Across Wavelength", fontsize=15
-        )
+        fig.suptitle(f"NIRDA {image_type.upper()} Across Wavelength", fontsize=15)
         return fig
 
     def get_trace(
@@ -323,9 +314,7 @@ class NIRDetector(nirda):
             if ~np.isfinite(wav[pdx]):
                 continue
             # Find the value in each pixel
-            k = (wavelength > wav_edges[pdx][0]) & (
-                wavelength < wav_edges[pdx][1]
-            )
+            k = (wavelength > wav_edges[pdx][0]) & (wavelength < wav_edges[pdx][1])
             wp = np.hstack(
                 [
                     wav_edges[pdx][0] + 1e-12 * u.AA,
@@ -533,9 +522,7 @@ class NIRDetector(nirda):
         # p1_0, p2_0 = self.wcs.all_world2pix([[ra.value, dec.value]], 0)[0].T
         p1_0, p2_0 = self.world_to_pixel(ra, dec)
         dp = 1 / pixel_resolution
-        p_range = (
-            np.arange(self.trace_range[0], self.trace_range[1], dp) + dp / 2
-        )
+        p_range = np.arange(self.trace_range[0], self.trace_range[1], dp) + dp / 2
 
         # CH: This code was when we thought the WCS distortion applied to the trace
         # Is there any distortion from the prism?
@@ -684,9 +671,7 @@ class NIRDetector(nirda):
         )
         xp, yp = np.arange(0, 1, 1 / sub_res), np.arange(0, 1, 1 / sub_res)
 
-        grid = np.zeros(
-            (sub_res, sub_res, wav.shape[0], ys.shape[0], xs.shape[0])
-        )
+        grid = np.zeros((sub_res, sub_res, wav.shape[0], ys.shape[0], xs.shape[0]))
         jdx, kdx = 0, 0
         for kdx in tqdm(
             range(yp.shape[0]),
@@ -703,16 +688,12 @@ class NIRDetector(nirda):
                     )
                     ar /= ar.sum()
                     k = np.asarray(
-                        np.meshgrid(
-                            np.in1d(ys, y1), np.in1d(xs, x1), indexing="ij"
-                        )
+                        np.meshgrid(np.in1d(ys, y1), np.in1d(xs, x1), indexing="ij")
                     ).all(axis=0)
                     # need to integrate here to get correct units! self.sensitivity(w*u.micron)/npix
                     grid[kdx, jdx, idx, k] = ar[
                         np.asarray(
-                            np.meshgrid(
-                                np.in1d(y1, ys), np.in1d(x1, xs), indexing="ij"
-                            )
+                            np.meshgrid(np.in1d(y1, ys), np.in1d(x1, xs), indexing="ij")
                         ).all(axis=0)
                     ]  # * self.sensitivity(w*u.micron)/npix
 
@@ -776,14 +757,12 @@ class NIRDetector(nirda):
         spectrum = spec.to(u.erg / (u.micron * u.second * u.cm**2)).value
         sensitivity = self.sensitivity(wav).value
         wavelength = wav.to(u.micron).value
-        unit_convert = (
-            1 * wav.unit * spec.unit * self.sensitivity(wav[0]).unit
-        ).to(u.DN / u.second)
+        unit_convert = (1 * wav.unit * spec.unit * self.sensitivity(wav[0]).unit).to(
+            u.DN / u.second
+        )
         integral = np.zeros(wav_edges.shape[0])
         for pdx in range(len(wav_edges)):
-            k = (wavelength > wav_edges[pdx][0]) & (
-                wavelength < wav_edges[pdx][1]
-            )
+            k = (wavelength > wav_edges[pdx][0]) & (wavelength < wav_edges[pdx][1])
             wp = np.hstack(
                 [
                     wav_edges[pdx][0] + 1e-12,

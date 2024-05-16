@@ -96,9 +96,7 @@ class PSF(object):
         #         # This should make the array ROW-major
         replace = {"x": "column", "y": "row"}
         dimension_names = [
-            replace[i.name.lower()]
-            if i.name.lower() in replace
-            else i.name.lower()
+            replace[i.name.lower()] if i.name.lower() in replace else i.name.lower()
             for i in hdu[2:]
         ]
 
@@ -107,19 +105,14 @@ class PSF(object):
                 np.where(np.asarray(dimension_names) == "row")[0][0],
                 np.where(np.asarray(dimension_names) == "column")[0][0],
             )
-            l = np.hstack(
-                [l, list(set(list(np.arange(len(hdu) - 2))) - set(l))]
-            )
+            l = np.hstack([l, list(set(list(np.arange(len(hdu) - 2))) - set(l))])
         else:
             l = np.arange(len(hdu) - 2)
 
         psf_flux = hdu[1].data.transpose(np.hstack([1, 0, *l + 2]))
         dimension_names = [dimension_names[l1] for l1 in l]
         dimension_units = [u.Unit(hdu[l1].header["UNIT"]) for l1 in l + 2]
-        X = [
-            hdu[l1].data.transpose(l) * u.Unit(hdu[l1].header["UNIT"])
-            for l1 in l + 2
-        ]
+        X = [hdu[l1].data.transpose(l) * u.Unit(hdu[l1].header["UNIT"]) for l1 in l + 2]
 
         return PSF(
             X,
@@ -161,12 +154,9 @@ class PSF(object):
                     [np.hstack([dim, list(dims - set([dim]))]) + 2, 0, 1]
                 )
                 deshape = [
-                    np.where(reshape == idx)[0][0]
-                    for idx in range(len(reshape))
+                    np.where(reshape == idx)[0][0] for idx in range(len(reshape))
                 ]
-                self._psf_flux = self._psf_flux.transpose(reshape)[
-                    s
-                ].transpose(deshape)
+                self._psf_flux = self._psf_flux.transpose(reshape)[s].transpose(deshape)
                 midpoint = getattr(self, self.dimension_names[dim] + "1d")
                 midpoint = midpoint[len(midpoint) // 2]
                 setattr(self, self.dimension_names[dim] + "0d", midpoint)
@@ -213,10 +203,7 @@ class PSF(object):
             )
         # Check units
         point = tuple(
-            [
-                u.Quantity(p, self.dimension_units[dim])
-                for dim, p in enumerate(point)
-            ]
+            [u.Quantity(p, self.dimension_units[dim]) for dim, p in enumerate(point)]
         )
         # Check in bounds
         for dim, p in enumerate(point):
@@ -295,7 +282,7 @@ class PSF(object):
         if len(row) > 5:
             row, row_w = downsample(row, 5)
             column, col_w = downsample(column, 5)
-#        npoints = np.min([5, len(row)])
+        #        npoints = np.min([5, len(row)])
         self._psf_flux_jitter *= 0
         if (row.sum() == 0) & (column.sum() == 0):
             self.psf_flux = self._psf_flux_blur + self._psf_flux_jitter
@@ -419,9 +406,7 @@ class PSF(object):
         psf2 = PSF(
             [
                 getattr(self, dnm).transpose(
-                    np.hstack(
-                        [dim, list(set(np.arange(self.ndims)) - set([dim]))]
-                    )
+                    np.hstack([dim, list(set(np.arange(self.ndims)) - set([dim]))])
                 )[0]
                 for dnm in dnms
             ],

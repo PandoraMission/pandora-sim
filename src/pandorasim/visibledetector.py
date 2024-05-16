@@ -1,23 +1,25 @@
 """Holds metadata and methods on Pandora VISDA"""
 # Standard library
 import warnings
-# from glob import glob
 
 # Third-party
 import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
+from pandorasat.visibledetector import VisibleDetector as visda
+
 # import pandas as pd
 # from astropy.io import fits
 from tqdm import tqdm
 
-from pandorasat.visibledetector import VisibleDetector as visda
-
 from . import PACKAGEDIR, PANDORASTYLE
+
 # from .detector import Detector
 from .psf import PSF, interpfunc
 from .utils import get_simple_cosmic_ray_image
 from .wcs import get_wcs
+
+# from glob import glob
 
 
 class VisibleDetector(visda):
@@ -36,12 +38,12 @@ class VisibleDetector(visda):
     """
 
     def __init__(
-           self,
-            ra: u.Quantity,
-            dec: u.Quantity,
-            theta: u.Quantity,
-            transpose_psf: bool = False,
-            ):
+        self,
+        ra: u.Quantity,
+        dec: u.Quantity,
+        theta: u.Quantity,
+        transpose_psf: bool = False,
+    ):
         self.ra, self.dec, self.theta = (ra, dec, theta)
         """Some detector specific functions to run on initialization"""
         # self.shape = (2048, 2048)
@@ -146,9 +148,7 @@ class VisibleDetector(visda):
         """
         coords = np.vstack(
             [
-                column.to(u.pixel).value
-                if isinstance(column, u.Quantity)
-                else column,
+                column.to(u.pixel).value if isinstance(column, u.Quantity) else column,
                 row.to(u.pixel).value if isinstance(row, u.Quantity) else row,
             ]
         ).T
@@ -196,10 +196,7 @@ class VisibleDetector(visda):
                     [
                         x1,
                         y1,
-                        [
-                            item.value
-                            for key, item in freeze_dictionary.items()
-                        ],
+                        [item.value for key, item in freeze_dictionary.items()],
                     ]
                 )
             )
@@ -265,9 +262,7 @@ class VisibleDetector(visda):
                 for jdx, row in enumerate(np.arange(0, 1, 1 / res)):
                     y1, x1, ar = self.psf.prf(prf_point, location=(row, col))
                     k = np.asarray(
-                        np.meshgrid(
-                            np.in1d(ys, y1), np.in1d(xs, x1), indexing="ij"
-                        )
+                        np.meshgrid(np.in1d(ys, y1), np.in1d(xs, x1), indexing="ij")
                     ).all(axis=0)
                     grid[jdx, idx, k] = ar.ravel()
             return grid
@@ -296,9 +291,7 @@ class VisibleDetector(visda):
 
         grid = grid.transpose([4, 5, 2, 3, 0, 1])
 
-        grid /= np.trapz(np.trapz(grid, ys, axis=0), axis=0)[
-            None, None, :, :, :, :
-        ]
+        grid /= np.trapz(np.trapz(grid, ys, axis=0), axis=0)[None, None, :, :, :, :]
 
         # Function to get PRF at any given location
         # Will interpolate across the detector, but will return the closest match in subpixel space
@@ -412,12 +405,8 @@ class VisibleDetector(visda):
             return r, c, np.zeros(shape)
 
         f = self.psf.psf(point)  # , freeze_dimensions=freeze_dimensions)
-        s1 = np.asarray(
-            [np.interp(r, r1, f[:, idx]) for idx in range(f.shape[1])]
-        )
-        s2 = np.asarray(
-            [np.interp(c, c1, s1[:, idx]) for idx in range(s1.shape[1])]
-        )
+        s1 = np.asarray([np.interp(r, r1, f[:, idx]) for idx in range(f.shape[1])])
+        s2 = np.asarray([np.interp(c, c1, s1[:, idx]) for idx in range(s1.shape[1])])
         s2 /= s2.sum()
         if return_locs:
             return r, c, s2
@@ -535,12 +524,7 @@ class VisibleDetector(visda):
                         indexing="ij",
                     )
                 ).astype(int)
-                k = (
-                    (X >= 0)
-                    & (X < self.shape[1])
-                    & (Y >= 0)
-                    & (Y < self.shape[0])
-                )
+                k = (X >= 0) & (X < self.shape[1]) & (Y >= 0) & (Y < self.shape[0])
                 science_image[tdx // nreads, Y[k], X[k]] += self.apply_gain(
                     u.Quantity(
                         np.random.poisson(
@@ -588,9 +572,7 @@ class VisibleDetector(visda):
                     image_shape=self.shape,
                 ).value
 
-        time = np.asarray([time[idx::nreads] for idx in range(nreads)]).mean(
-            axis=0
-        )
+        time = np.asarray([time[idx::nreads] for idx in range(nreads)]).mean(axis=0)
         self.ffis = science_image
         return time, science_image
 
@@ -638,9 +620,7 @@ class VisibleDetector(visda):
         """
         f = np.zeros((nframes, *self.subarray_size), dtype=int)
         time = self.time[: nreads * nframes]
-        time = np.asarray([time[idx::nreads] for idx in range(nreads)]).mean(
-            axis=0
-        )
+        time = np.asarray([time[idx::nreads] for idx in range(nreads)]).mean(axis=0)
         for idx, m in cat.iterrows():
             if time_series_generators is None:
                 tsgenerator = lambda x: 1  # noqa
