@@ -111,6 +111,7 @@ def get_jitter(
 
     return time, *jitter
 
+
 def get_integrations(
     SC_Resets1,
     SC_Resets2,

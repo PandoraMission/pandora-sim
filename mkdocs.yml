@@ -5,8 +5,7 @@ nav:
       - NIRSim: nirsim.md
       - VisibleSim: visiblesim.md
       - Base Class `Sim`: sim.md
-    - Notebooks:
-      - Simulation Demo: notebooks/demo.md
+      
 theme:
   name: "material"
   icon:
@@ -14,6 +13,7 @@ theme:
 repo_url: https://github.com/pandoramission/pandora-sim
 plugins:
   - search
+  - include-markdown
   - mkdocstrings:
       watch:
         - src/pandorasim

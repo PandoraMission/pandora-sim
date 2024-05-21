@@ -21,7 +21,6 @@ logger = get_logger("pandora-sim")
 
 
 class VisibleSim(Sim):
-    
     @add_docstring("ROI_size", "nROIs")
     def __init__(
         self,
