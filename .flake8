@@ -11,4 +11,5 @@ count = True
 show-source = True
 extend-ignore = E203, E741, W605
 per-file-ignores =
-    src/pandorasat/citations.py:E501
+    citations.py:E501
+    docstrings.py:E501

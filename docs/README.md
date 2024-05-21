@@ -2,29 +2,40 @@
 
 # PandoraSim
 
-This Python package contains metadata for Pandora, and **basic** functions to create estimates of, e.g. count rates from targets on the detectors.
+This Python package contains classes to simulate data from Pandora, and provides estimates for level 1 products from the spacecraft.
 
-### Installation
+## Installation
 
-To install this package you can use
+If you are installing the simulator and expect you will not wish to tweak any of the code internal to the simulator or any other aspects of DPC software, you can install `pandora-sim` with `pip`
 
 ```
-pip install pandora-sim --upgrade
+pip install pandorasim --upgrade
 ```
 
-Make sure to upgrade regularly to get the latest estimates of the Pandora meta data.
+However, if you are either:
 
+1. Expect to tweak/update `pandorasim` or any of the Pandora software dependencies
+2. Need to run `pandorasim` in a different environment to your native environment
 
-### Example Usage
+You may want to install with `poetry`. You can do this with
 
-Below is an example usage of some of the functionality in this package. In general, this package will allow you to get metadata from specific subsystems of Pandora.
-
-```python
-from pandorasim import PandoraSim
-print(PandoraSim.NIRDA.gain)
-print(PandoraSim.Optics.PSF)
-print(PandoraSim.VisibleDetector.sensitivity(wavelength))
-print(PandoraSim.Orbit.period)
+```
+pip install --upgrade poetry
+git clone https://github.com/PandoraMission/pandora-sim
+cd pandorasim
+poetry install
 ```
 
-See our API documentation for full details on the metadata available in this package.
+To run `pandorasim` you can then work however you work in Python, be make sure you
+
+1. Are working in the `pandorasim` directoy
+2. Use the correct `poetry` environment by prepending all your commands with `poetry run`. E.g. `poetry run jupyterlab`, `poetry run python`, `poetry run pytest` etc.
+
+### Dependencies
+
+This package depends on two other packages from the Pandora software ecosystem.
+
+- [`pandorasat`](https://github.com/PandoraMission/pandora-sat/)
+- [`pandorapsf`](https://github.com/PandoraMission/pandora-psf/)
+
+Each of these packages are **updated often** as we gain new insights into what to expect from Pandora. If you are working with the simulator, you should make sure to keep your versions of all packages updated.

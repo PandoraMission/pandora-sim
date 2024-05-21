@@ -1,56 +1,17 @@
-__version__ = "0.4.1"
+__version__ = "1.0.0"
 # Standard library
 import os  # noqa
 
 PACKAGEDIR = os.path.abspath(os.path.dirname(__file__))
-PANDORASTYLE = "{}/data/pandora.mplstyle".format(PACKAGEDIR)
+TESTDIR = "/".join(PACKAGEDIR.split("/")[:-2]) + "/tests/"
 
 # Standard library
 import logging  # noqa: E402
-import shutil  # noqa: E402
-from glob import glob  # noqa: E402
-
-# Third-party
-from astropy.utils.data import download_file  # noqa: E402
-
-from .utils import get_flatfield  # noqa: E402
 
 logging.basicConfig()
 logger = logging.getLogger("pandorasim")
 
-if not os.path.isfile(f"{PACKAGEDIR}/data/pandora_vis_20220506.fits"):
-    # Download vis PSF
-    logger.warning("No PSF file found. Downloading 100MB VIS PSF file.")
-    p = download_file(
-        "https://zenodo.org/record/7596336/files/pandora_vis_20220506.fits?download=1",
-        pkgname="pandora-sim",
-    )
-    shutil.move(p, f"{PACKAGEDIR}/data/pandora_vis_20220506.fits")
-    logger.warning(
-        f"VIS PSF downloaded to {PACKAGEDIR}/data/pandora_vis_20220506.fits."
-    )
 
-if not os.path.isfile(f"{PACKAGEDIR}/data/pandora_nir_20220506.fits"):
-    # Download nir PSF
-    logger.warning("No PSF file found. Downloading 10MB NIR PSF")
-    p = download_file(
-        "https://zenodo.org/record/7596336/files/pandora_nir_20220506.fits?download=1",
-        pkgname="pandora-sim",
-    )
-    shutil.move(p, f"{PACKAGEDIR}/data/pandora_nir_20220506.fits")
-    logger.warning(
-        f"NIR PSF downloaded to {PACKAGEDIR}/data/pandora_nir_20220506.fits."
-    )
-
-flatnames = glob(f"{PACKAGEDIR}/data/flatfield_*.fits")
-if len(flatnames) is None:
-    # Make a bogus flatfield
-    logger.warning("No flatfield file found. Generating a random one for you.")
-    get_flatfield()
-    logger.warning(
-        f"Generated flatfield in {PACKAGEDIR}/data/pandora_nir_20220506.fits."
-    )
-
-from .pandorasim import PandoraSim  # noqa
-from .psf import PSF  # noqa
-from .targets import Target  # noqa
+from .nirsim import NIRSim  # noqa
+from .utils import plot_nirda_integrations  # noqa
+from .visiblesim import VisibleSim  # noqa

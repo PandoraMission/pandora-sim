@@ -1,18 +1,11 @@
 site_name: PandoraSim
 nav:
     - Home: README.md
-    - PandoraSim Conventions: conventions.ipynb
     - API:
-      - Target: target.md
-      - PandoraSim: pandorasim.md
-      - NIRDA: irdetector.md
-      - VISDA: visibledetector.md
-      - PSF: psf.md
-      - Optics: optics.md
-      - Orbit: orbit.md
-    - Notebooks:
-      - WASP-69b Demo: WASP-69.ipynb
-      - GJ 3470b Demo: GJ3470.ipynb
+      - NIRSim: nirsim.md
+      - VisibleSim: visiblesim.md
+      - Base Class `Sim`: sim.md
+      
 theme:
   name: "material"
   icon:
@@ -20,10 +13,22 @@ theme:
 repo_url: https://github.com/pandoramission/pandora-sim
 plugins:
   - search
-  - mkdocs-jupyter:
-      execute: False
-      include_source: True
-      ignore_h1_titles: False
+  - include-markdown
   - mkdocstrings:
       watch:
         - src/pandorasim
+      default_handler: python      
+      handlers:
+        python:
+          options:
+            show_source: false
+            filters:
+              - "!^_"
+markdown_extensions:
+  - pymdownx.arithmatex:
+      generic: true
+  - tables
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
