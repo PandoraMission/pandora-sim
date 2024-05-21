@@ -33,7 +33,7 @@ class Sim(ABC):
     @abstractmethod
     def point(self, ra: u.Quantity, dec: u.Quantity, roll: u.Quantity):
         self.ra, self.dec, self.roll = ra, dec, roll
-        self.wcs = self.detector.get_wcs(self.ra, self.dec)
+        self.wcs = self.detector.get_wcs(self.ra, self.dec, theta=self.roll)
 
         logger.start_spinner("Finding nearby sources...")
         self.source_catalog = self._get_source_catalog()

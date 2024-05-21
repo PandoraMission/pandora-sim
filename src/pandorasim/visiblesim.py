@@ -140,10 +140,11 @@ class VisibleSim(Sim):
     def background_rate(self):
         return 4 * u.electron / u.second
 
-    @add_docstring("nreads")
+    @add_docstring("nreads", "noise")
     def get_FFI(
         self,
         nreads: int = 50,
+        noise=True,
     ):
         """Get a single frame of data as an FFI
 
@@ -162,35 +163,35 @@ class VisibleSim(Sim):
 
         # Apply poisson (shot) noise, ffi now has shape  (nrows, ncolumns), units of electrons
         ffi = np.random.poisson(self.scene.model(source_flux)[0])
+        if noise:
+            # Apply background to every read, units of electrons
+            ffi += np.random.poisson(
+                (self.background_rate * int_time).value, size=ffi.shape
+            ).astype(int)
 
-        # Apply background to every read, units of electrons
-        ffi += np.random.poisson(
-            (self.background_rate * int_time).value, size=ffi.shape
-        ).astype(int)
+            # # Apply a bias to every read which is a Gaussian with mean = bias * nreads value and std = (nreads * (read noise)**2)**0.5
+            # We actually do this as a sum because otherwise the integer math doesn't work out...!?
 
-        # # Apply a bias to every read which is a Gaussian with mean = bias * nreads value and std = (nreads * (read noise)**2)**0.5
-        # We actually do this as a sum because otherwise the integer math doesn't work out...!?
-
-        test_distribution = (
-            np.random.normal(
-                loc=self.detector.bias.value,
-                scale=self.detector.read_noise.value,
-                size=(nreads, 10000),
+            test_distribution = (
+                np.random.normal(
+                    loc=self.detector.bias.value,
+                    scale=self.detector.read_noise.value,
+                    size=(nreads, 10000),
+                )
+                .astype(int)
+                .sum(axis=0)
             )
-            .astype(int)
-            .sum(axis=0)
-        )
-        ffi += np.random.normal(
-            loc=test_distribution.mean(),
-            scale=self.detector.read_noise.value * np.sqrt(nreads),
-            size=(ffi.shape),
-        ).astype(int)
+            ffi += np.random.normal(
+                loc=test_distribution.mean(),
+                scale=self.detector.read_noise.value * np.sqrt(nreads),
+                size=(ffi.shape),
+            ).astype(int)
 
-        # Add poisson noise for the dark current to every frame, units of electrons
-        ffi += np.random.poisson(
-            lam=(self.detector.dark * int_time).value,
-            size=ffi.shape,
-        ).astype(int)
+            # Add poisson noise for the dark current to every frame, units of electrons
+            ffi += np.random.poisson(
+                lam=(self.detector.dark * int_time).value,
+                size=ffi.shape,
+            ).astype(int)
 
         # Apply gain
         #        ffi = self.detector.apply_gain(u.Quantity(ffi.ravel(), unit='electron')).value.reshape(ffi.shape)
