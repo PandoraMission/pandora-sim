@@ -163,9 +163,9 @@ class VisibleSim(Sim):
 
         # Apply poisson (shot) noise, ffi now has shape  (nrows, ncolumns), units of electrons
         ffi = np.random.poisson(self.scene.model(source_flux)[0])
-        if hasattr(self.detector, 'fieldstop'):
+        if hasattr(self.detector, "fieldstop"):
             ffi *= self.detector.fieldstop.astype(int)
-            
+
         if noise:
             # Apply background to every read, units of electrons
             ffi += np.random.poisson(
