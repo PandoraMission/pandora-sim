@@ -3,14 +3,12 @@ nav:
     - Home: README.md
     - PandoraSim Conventions: conventions.ipynb
     - API:
-      - Target: target.md
-      - PandoraSim: pandorasim.md
-      - NIRDA: irdetector.md
-      - VISDA: visibledetector.md
-      - PSF: psf.md
+      - NIRDA: nirsim.md
+      - VISDA: visiblesim.md
     - Notebooks:
-      - WASP-69b Demo: WASP-69.ipynb
-      - GJ 3470b Demo: GJ3470.ipynb
+      - Simulation Demo: demo.ipynb
+      # - WASP-69b Demo: WASP-69.ipynb
+      # - GJ 3470b Demo: GJ3470.ipynb
 theme:
   name: "material"
   icon:
@@ -18,10 +16,14 @@ theme:
 repo_url: https://github.com/pandoramission/pandora-sim
 plugins:
   - search
-  - mkdocs-jupyter:
-      execute: False
-      include_source: True
-      ignore_h1_titles: False
+  # - mkdocs-jupyter:
+  #     execute: False
+  #     include_source: True
+  #     ignore_h1_titles: False
   - mkdocstrings:
       watch:
         - src/pandorasim
+      handlers:
+        python:
+          options:
+            members:True

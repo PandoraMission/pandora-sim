@@ -1,6 +1,6 @@
-# Documentation for `PSF`
+# Documentation for `VISDA`
 
-::: pandorasim.psf
+::: pandorasim.visiblesim.VisibleSim
     handler: python
     rendering:
       show_root_heading: false

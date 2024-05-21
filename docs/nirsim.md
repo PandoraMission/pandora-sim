@@ -1,6 +1,6 @@
-# Documentation for `PandoraSim`
+# Documentation for `NIRDA`
 
-::: pandorasim.PandoraSim
+::: pandorasim.nirsim.NIRSim
     handler: python
     rendering:
       show_root_heading: false

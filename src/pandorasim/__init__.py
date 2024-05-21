@@ -12,4 +12,6 @@ logging.basicConfig()
 logger = logging.getLogger("pandorasim")
 
 
-from .visiblesim import VisibleSim   # noqa
+from .nirsim import NIRSim  # noqa
+from .utils import plot_nirda_integrations  # noqa
+from .visiblesim import VisibleSim  # noqa

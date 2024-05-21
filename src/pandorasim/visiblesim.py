@@ -1,243 +1,50 @@
-import pandorasat as ps
-import pandorapsf as pp
-import matplotlib.pyplot as plt
-from pandorasat import PANDORASTYLE
-
-from astropy.table import Table
-from astropy.time import Time
-from astropy.io import fits
-
-# from pandorasim import PandoraSim
-import astropy.units as u
-import pandas as pd
-from pandorasat import VisibleDetector
-import numpy as np
+"""Simulator for Visible Detector"""
 from copy import deepcopy
 
-from .utils import get_jitter
+import astropy.units as u
+import matplotlib.pyplot as plt
+import numpy as np
+import pandorapsf as pp
+from astropy.io import fits
+from astropy.table import Table
+from astropy.time import Time
+from pandorasat import PANDORASTYLE, VisibleDetector, get_logger
+
 from . import __version__
+from .docstrings import add_docstring
+from .sim import Sim
+from .utils import get_jitter
+
+__all__ = ["VisibleSim"]
+
+logger = get_logger("pandora-sim")
 
 
-class VisibleSim(object):
-    """Holds methods for simulating data from the Visible Detector on Pandora."""
-
+class VisibleSim(Sim):
+    
+    @add_docstring("ROI_size", "nROIs")
     def __init__(
         self,
-        ra: u.Quantity,
-        dec: u.Quantity,
-        roll: u.Quantity,
         ROI_size=(50, 50),
         nROIs=9,
     ):
         """
         Visible Simulator for Pandora.
-
-        Properties
-        ----------
-        ra: float
-            Right Ascension of the pointing
-        dec: float
-            Declination of the pointing
-        theta: float
-            Roll angle of the pointing
-        ROI_size: tuple
-            Size in pixels of each region of interest
-        nROIs: int
-            Number of regions of interest.
         """
-        self.ra, self.dec, self.roll, self.ROI_size, self.nROIs = (
-            ra,
-            dec,
-            roll,
-            ROI_size,
-            nROIs,
-        )
-        self.detector = VisibleDetector()
-        self.psf = pp.PSF.from_name("VISDA")
-        self.wcs = self.detector.get_wcs(self.ra, self.dec)
-        self.source_catalog = self._get_source_catalog()
-        self.locations = np.asarray(
-            [self.source_catalog.vis_row, self.source_catalog.vis_column]
-        ).T
-        self.ROI_corners = self.select_ROI_corners(self.nROIs)
-        self.scene = None
-        self.roiscene = None
+        super().__init__(detector=VisibleDetector())
+        self.ROI_size = ROI_size
+        self.nROIs = nROIs
 
-    def world_to_pixel(self, ra, dec, distortion=True):
-        """Helper function. This function ensures we keep the row-major convention in pandora-sim.
-
-        Parameters
-        ----------
-        ra : float
-            Right Ascension to be converted to pixel position.
-        dec : float
-            Declination to be converted to pixel position.
-        distortion : bool
-            Flag whether to account for the distortion in the WCS when converting from RA/Dec
-            to pixel position. Default is True.
-
-        Returns
-        -------
-        np.ndarray
-            Row and column positions of each provided RA and Dec.
-        """
-        coords = np.vstack(
-            [
-                ra.to(u.deg).value if isinstance(ra, u.Quantity) else ra,
-                dec.to(u.deg).value if isinstance(dec, u.Quantity) else dec,
-            ]
-        ).T
-        if distortion:
-            column, row = self.wcs.all_world2pix(coords, 0).T
-        else:
-            column, row = self.wcs.wcs_world2pix(coords, 0).T
-        return np.vstack([row, column])
-
-    def pixel_to_world(self, row, column, distortion=True):
-        """Helper function. This function ensures we keep the row-major convention in pandora-sim.
-
-        Parameters
-        ----------
-        row : float
-            Pixel row position to be converted to sky coordinates.
-        column : float
-            Pixel column position to be converted to sky coordinates.
-        distortion : bool
-            Flag whether to account for the distortion in the WCS when converting from pixel position
-            to sky coordinates. Default is True.
-
-        Returns
-        -------
-        np.ndarray
-            RA and Dec of input pixel positions.
-        """
-        coords = np.vstack(
-            [
-                column.to(u.pixel).value if isinstance(column, u.Quantity) else column,
-                row.to(u.pixel).value if isinstance(row, u.Quantity) else row,
-            ]
-        ).T
-        if distortion:
-            return self.wcs.all_pix2world(coords, 0).T * u.deg
-        else:
-            return self.wcs.wcs_pix2world(coords, 0).T * u.deg
-
-    def __repr__(self):
-        return f"VisibleSim [({self.ra:.3f}, {self.dec:.3f})]"
-
-    def _get_source_catalog(self, distortion: bool = True, **kwargs) -> pd.DataFrame:
-        """Gets the source catalog of an input target
-
-        Parameters
-        ----------
-        target_name : str
-            Target name to obtain catalog for.
-        distortion : bool
-            Whether to apply a distortion to the WCS when mapping RA and Dec of catalog targets
-            to detector pixels. Default is True.
-        **kwargs
-            Additional arguments passed to the ps.utils.get_sky_catalog function.
-
-        Returns
-        -------
-        sky_catalog: pd.DataFrame
-            Pandas dataframe of all the sources near the target
-        """
-
-        # This is fixed for visda, for now
-        fieldstop_radius = (
-            (self.detector.fieldstop_radius / self.detector.pixel_size)
-            * self.detector.pixel_scale
-        ).to(u.deg)
-        radius = np.min(
-            [
-                (2 * fieldstop_radius.value**2) ** 0.5,
-                (
-                    2
-                    * ((2048 * u.pix * self.detector.pixel_scale).to(u.deg).value / 2)
-                    ** 2
-                )
-                ** 0.5,
-            ]
-        )
-
-        # Get location and magnitude data
-        cat = ps.utils.get_sky_catalog(
-            self.ra, self.dec, radius=radius * u.deg, **kwargs
-        )
-
-        ra, dec, mag = cat["coords"].ra.deg, cat["coords"].dec.deg, cat["bmag"]
-        vis_pix_coords = self.world_to_pixel(ra, dec, distortion=distortion)
-
-        k = (
-            np.abs(vis_pix_coords[0] - self.detector.shape[0] / 2)
-            < self.detector.shape[0] / 2
-        ) & (
-            np.abs(vis_pix_coords[1] - self.detector.shape[1] / 2)
-            < self.detector.shape[1] / 2
-        )
-        new_cat = deepcopy(cat)
-        for key, item in new_cat.items():
-            new_cat[key] = item[k]
-        vis_pix_coords, ra, dec, mag = (
-            vis_pix_coords[:, k],
-            ra[k],
-            dec[k],
-            mag[k],
-        )
-
-        # we're assuming that Gaia B mag is very close to the Pandora visible magnitude
-        vis_counts = np.zeros_like(mag)
-        vis_flux = np.zeros_like(mag)
-        wav = np.arange(100, 1000) * u.nm
-        s = np.trapz(self.detector.sensitivity(wav), wav)
-        for idx, m in enumerate(mag):
-            f = self.detector.flux_from_mag(m)
-            vis_flux[idx] = f.value
-            # counts in electron/u.second
-            vis_counts[idx] = (f * s).to(u.electron / u.second).value
-        source_catalog = (
-            pd.DataFrame(
-                np.vstack(
-                    [
-                        ra,
-                        dec,
-                        mag,
-                        *vis_pix_coords,
-                        vis_counts,
-                        vis_flux,
-                        new_cat["jmag"],
-                        new_cat["teff"].value,
-                        new_cat["logg"],
-                        new_cat["RUWE"],
-                        new_cat["ang_sep"].value,
-                    ]
-                ).T,
-                columns=[
-                    "ra",
-                    "dec",
-                    "mag",
-                    "vis_row",
-                    "vis_column",
-                    "vis_counts",
-                    "vis_flux",
-                    "jmag",
-                    "teff",
-                    "logg",
-                    "ruwe",
-                    "ang_sep",
-                ],
-            )
-            .astype({"vis_counts": int})
-            .drop_duplicates(["ra", "dec", "mag"])
-            .reset_index(drop=True)
-        )
-        return source_catalog
-
+    @add_docstring("nROIs")
     def select_ROI_corners(self, nROIs, magnitude_limit=14):
         """Selects the corners of ROIs.
 
         This is currently a placeholder. SOC will provide direction on how ROIs will be selected.
+
+        Parameters:
+        -----------
+        magnitude_limit : float
+            Visual magnitude limit down to which ROI targets will be considered.
         """
         source_mag = deepcopy(np.asarray(self.source_catalog.mag))
         locations = deepcopy(self.locations)
@@ -272,35 +79,83 @@ class VisibleSim(object):
             source_mag = source_mag[k]
         return corners
 
+    @add_docstring("ra", "dec", "theta")
+    def point(self, ra, dec, roll):
+        """
+        Point the simulation in a direction.
+        """
+        super().point(ra=ra, dec=dec, roll=roll)
+        logger.start_spinner("Building scene object...")
+        self.scene = pp.Scene(
+            self.locations - np.asarray(self.detector.shape) / 2,
+            self.psf,
+            self.detector.shape,
+            corner=(-self.detector.shape[0] // 2, -self.detector.shape[1] // 2),
+        )
+        logger.stop_spinner()
+        self.ROI_corners = self.select_ROI_corners(self.nROIs)
+
+        logger.start_spinner("Building ROI scene object...")
+
+        k = np.any(
+            [
+                (self.source_catalog.row > c[0])
+                & (self.source_catalog.row < (c[0] + self.ROI_size[0]))
+                & (self.source_catalog.column > c[1])
+                & (self.source_catalog.column < (c[1] + self.ROI_size[1]))
+                for c in self.ROI_corners
+            ],
+            axis=0,
+        )
+
+        self.roiscene = pp.ROIScene(
+            self.locations[k] - np.asarray(self.detector.shape) / 2,
+            self.psf,
+            self.detector.shape,
+            corner=(-self.detector.shape[0] // 2, -self.detector.shape[1] // 2),
+            ROI_size=self.ROI_size,
+            ROI_corners=self.ROI_corners,
+            nROIs=self.nROIs,
+        )
+        logger.stop_spinner()
+
+    def _get_source_catalog(self):
+        source_catalog = super()._get_source_catalog(gbpmagnitude_range=(-6, 18))
+
+        # we're assuming that Gaia B mag is very close to the Pandora visible magnitude
+        vis_counts = np.zeros(len(source_catalog))
+        vis_flux = np.zeros(len(source_catalog))
+        wav = np.arange(100, 1000) * u.nm
+        s = np.trapz(self.detector.sensitivity(wav), wav)
+        for idx, m in enumerate(np.asarray(source_catalog.mag)):
+            f = self.detector.flux_from_mag(m)
+            vis_flux[idx] = f.value
+            # counts in electron/u.second
+            vis_counts[idx] = (f * s).to(u.electron / u.second).value
+
+        source_catalog["counts"] = vis_counts
+        source_catalog["flux"] = vis_flux
+        return source_catalog
+
     @property
     def background_rate(self):
         return 4 * u.electron / u.second
 
+    @add_docstring("nreads")
     def get_FFI(
         self,
         nreads: int = 50,
     ):
         """Get a single frame of data as an FFI
 
-        Parameters
-        ----------
-        nreads: int
-            Number of reads to co-add together to make each frame. Default for Pandora VISDA is 50.
+        Returns:
+        --------
+        data : np.ndarray
+            Returns a single FFI as a numpy array with dtype uint32.
         """
-        # This takes a fair amount of time and memory so let's only make it if we need it
-        if self.scene is None:
-            self.scene = pp.Scene(
-                self.locations - 1024,
-                self.psf,
-                self.detector.shape,
-                corner=(-1024, -1024),
-            )
-
-        shape = self.detector.shape
         int_time = self.detector.integration_time * nreads
         source_flux = (
-            (np.asarray(self.source_catalog.vis_counts) * u.electron / u.second)
-            * int_time
+            (np.asarray(self.source_catalog.counts) * u.electron / u.second) * int_time
         ).value.astype(int)
 
         # FFI has shape (nrows, ncolumns), in units of electrons.
@@ -347,6 +202,16 @@ class VisibleSim(object):
         ffi[ffi > (nreads * 2**16)] = nreads * 2**16
         return ffi
 
+    @add_docstring(
+        "nreads",
+        "nframes",
+        "start_time",
+        "target_flux_function",
+        "noise",
+        "jitter",
+        "output_type",
+        "bin_frames",
+    )
     def observe(
         self,
         nreads=50,
@@ -358,32 +223,14 @@ class VisibleSim(object):
         output_type="fits",
         bin_frames=10,
     ):
-        """Returns an observation as though taken from the Pandora Observatory.
+        """
+        Returns an observation as though taken from the Pandora Observatory.
 
-        Parameters
-        ----------
-        nreads: int
-            Number of reads to co-add together to make each frame. Default for Pandora VISDA is 50.
-        nframes : int
-            Number of frames to return. Default is 100 frames.
-        start_time: astropy.time.Time
-            Time to start the observation. This is only used if returning a fits file, or supplying a flux function.
-        target_flux_function : function or None.
-            Function governing the generation of the time series from the subarray.
-            Default is None.
-        noise : bool
-            Flag determining whether noise is simulated and included. Default is True.
-        jitter : bool
-            Flag determining whether jitter is simulated and included. Default is True.
-        output_type: str
-            String flag to determine the result output. Valid strings are "fits" or "array".
-        bin_frames: int
-            If `nreads` is high, many reads must be calculated per frame stored. To reduce this, set `bin_frames`.
-            If `bin_frames=10`, only `nreads/10` reads will be calculated, each with an exposure time of
-            `self.detector.integration_time * bin_frames`.
+        Parameters:
+        -----------
 
-        Returns
-        -------
+        Returns:
+        --------
         result : np.ndarray or astropy.io.fits.HDUList
             Result of the simulation. Either a numpy array with shape (nROIs, nframes, nrows, ncolumns), or a fits format.
 
@@ -400,33 +247,30 @@ class VisibleSim(object):
 
         k = np.any(
             [
-                (self.source_catalog.vis_row > c[0])
-                & (self.source_catalog.vis_row < (c[0] + self.ROI_size[0]))
-                & (self.source_catalog.vis_column > c[1])
-                & (self.source_catalog.vis_column < (c[1] + self.ROI_size[1]))
+                (self.source_catalog.row > c[0])
+                & (self.source_catalog.row < (c[0] + self.ROI_size[0]))
+                & (self.source_catalog.column > c[1])
+                & (self.source_catalog.column < (c[1] + self.ROI_size[1]))
                 for c in self.ROI_corners
             ],
             axis=0,
         )
-        if self.roiscene is None:
-            self.roiscene = pp.ROIScene(
-                self.locations[k] - 1024,
-                self.psf,
-                self.detector.shape,
-                corner=(-1024, -1024),
-                ROI_size=self.ROI_size,
-                ROI_corners=self.ROI_corners,
-                nROIs=self.nROIs,
-            )
 
         source_flux = (
-            (np.asarray(self.source_catalog.vis_counts[k]) * u.electron / u.second)
+            (np.asarray(self.source_catalog.counts[k]) * u.electron / u.second)
             * integration_time.to(u.second)
         ).value.astype(int)[:, None] * np.ones(nr * nframes)[None, :]
 
         if jitter:
-            _, row, column, theta = get_jitter(
-                nframes=nframes * nr, frame_time=integration_time.to(u.second).value
+            _, row, column, _ = get_jitter(
+                rowstd=((1 * u.arcsecond) / self.detector.pixel_scale)
+                .to(u.pixel)
+                .value,
+                colstd=((1 * u.arcsecond) / self.detector.pixel_scale)
+                .to(u.pixel)
+                .value,
+                nframes=nframes * nr,
+                frame_time=integration_time.to(u.second).value,
             )
             delta_pos = np.asarray([row, column])
         else:
@@ -490,7 +334,6 @@ class VisibleSim(object):
                 data,
                 nreads=nreads,
                 start_time=start_time,
-                integration_time=integration_time,
             )
 
     def show_ROI(self):
@@ -631,7 +474,7 @@ class VisibleSim(object):
         primary_kwds["FRMSCLCT"] = (nframes, "number of frames collected")
         primary_kwds["NUMCOAD"] = (nreads, "number of frames coadded")
         primary_kwds["FRMTIME"] = (
-            nreads * integration_time.to(u.second).value,
+            (nreads * integration_time).to(u.second).value,
             "time in each frame [s]",
         )
         primary_kwds["CORSTIME"] = (
@@ -672,7 +515,7 @@ class VisibleSim(object):
         for key, value in image_kwds.items():
             image_hdu.header[key] = value
 
-        for card in self.wcs.to_header().cards:
+        for card in self.wcs.to_header(relax=True).cards:
             image_hdu.header.append(card)
 
         table_hdu = fits.table_to_hdu(Table(self.ROI_corners))

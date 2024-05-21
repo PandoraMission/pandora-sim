@@ -1,7 +1,7 @@
 # Standard library
-import os
 import warnings
 from copy import copy
+from typing import Dict, Optional
 
 # Third-party
 import astropy.units as u
@@ -14,13 +14,11 @@ from astropy.time import Time
 from astroquery import log as asqlog
 from astroquery.ipac.nexsci.nasa_exoplanet_archive import NasaExoplanetArchive
 
-from typing import Dict, Optional
-
-
 asqlog.setLevel("ERROR")
 # Third-party
 
-frame_dict = {"reset": 1, "read": 2, "drop": 4}
+FRAME_BIT_DICT = {"reset": 1, "read": 2, "drop": 4}
+
 
 def get_planets(coord: SkyCoord, radius: u.Quantity = 20 * u.arcsecond) -> dict:
     """Largish default radius for high proper motion targets this breaks
@@ -54,6 +52,7 @@ def get_planets(coord: SkyCoord, radius: u.Quantity = 20 * u.arcsecond) -> dict:
         else:
             planets = {}
     return planets
+
 
 def get_jitter(
     rowstd: float = 1,
@@ -112,86 +111,6 @@ def get_jitter(
 
     return time, *jitter
 
-
-
-def get_simple_cosmic_ray_image(
-    cosmic_ray_expectation=0.4,
-    average_cosmic_ray_flux: u.Quantity = u.Quantity(1e3, unit="DN"),
-    cosmic_ray_distance: u.Quantity = u.Quantity(0.01, unit=u.pixel / u.DN),
-    image_shape=(2048, 2048),
-    gain_function=lambda x: x.value * u.electron,
-):
-    """
-    Function to get a simple cosmic ray image
-
-    This function has no basis in physics at all. The rate of cosmic rays, the energy deposited,
-    sampling distributions, all of it is completely without a basis in physics. All this function
-    can do is put down fairly reasonable "tracks" that mimic the impact of cosmic rays, with some
-    tuneable parameters to change the properties.
-
-    """
-    ncosmics = np.random.poisson(cosmic_ray_expectation)
-    im = np.zeros(image_shape, dtype=int)
-
-    for ray in np.arange(ncosmics):
-        # Random flux drawn from some exponential...
-        cosmic_ray_counts = (
-            np.random.exponential(average_cosmic_ray_flux.value)
-            * average_cosmic_ray_flux.unit
-        )
-
-        # Random location
-        xloc = np.random.uniform(0, image_shape[0])
-        yloc = np.random.uniform(0, image_shape[1])
-        # Random angle into the detector
-        theta = np.random.uniform(
-            -0.5 * np.pi, 0.5 * np.pi
-        )  # radians from the top of the sensor?
-        # Random angle around
-        phi = np.random.uniform(0, 2 * np.pi)
-
-        r = np.sin(theta) * (cosmic_ray_distance * cosmic_ray_counts).value
-
-        x1, x2, y1, y2 = (
-            xloc,
-            xloc + (r * np.cos(phi)),
-            yloc,
-            yloc + (r * np.sin(phi)),
-        )
-        m = (y2 - y1) / (x2 - x1)
-        c = y1 - (m * x1)
-
-        xs, ys = np.sort([x1, x2]).astype(int), np.sort([y1, y2]).astype(int)
-        xs, ys = [xs[0], xs[1] if np.diff(xs) > 0 else xs[1] + 1], [
-            ys[0],
-            ys[1] if np.diff(ys) > 0 else ys[1] + 1,
-        ]
-
-        coords = np.vstack(
-            [
-                np.round(np.arange(*xs, 0.005)).astype(int),
-                np.round(m * np.arange(*xs, 0.005) + c).astype(int),
-            ]
-        ).T
-        coords = coords[(coords[:, 1] >= ys[0]) & (coords[:, 1] <= ys[1])]
-        if len(coords) == 0:
-            continue
-        fper_element = cosmic_ray_counts / len(coords)
-        coords = coords[
-            (
-                (coords[:, 0] >= 0)
-                & (coords[:, 0] < image_shape[0])
-                & (coords[:, 1] >= 0)
-                & (coords[:, 1] < image_shape[1])
-            )
-        ]
-        coords, wcoords = np.unique(coords, return_counts=True, axis=0)
-        im[coords[:, 0], coords[:, 1]] = np.random.poisson(
-            gain_function(wcoords * fper_element).value
-        )
-    return u.Quantity(im, dtype=int, unit=u.electron)
-
-
 def get_integrations(
     SC_Resets1,
     SC_Resets2,
@@ -232,25 +151,25 @@ def get_integrations(
         with each integer element representing that frame's status.
     """
     cintn = [
-        np.zeros(SC_Resets2, int) + frame_dict["reset"],
+        np.zeros(SC_Resets2, int) + FRAME_BIT_DICT["reset"],
         *[
-            np.zeros(SC_ReadFrames, int) + frame_dict["read"],
-            np.zeros(SC_DropFrames2, int) + frame_dict["drop"],
+            np.zeros(SC_ReadFrames, int) + FRAME_BIT_DICT["read"],
+            np.zeros(SC_DropFrames2, int) + FRAME_BIT_DICT["drop"],
         ]
         * (SC_Groups - 1),
-        np.zeros(SC_ReadFrames, int) + frame_dict["read"],
+        np.zeros(SC_ReadFrames, int) + FRAME_BIT_DICT["read"],
     ]
     cint1 = copy(cintn)
     cint1.pop(0)
 
-    cint1.insert(0, np.zeros(SC_Resets1, int) + frame_dict["reset"])
-    cint1.insert(1, np.zeros(SC_DropFrames1, int) + frame_dict["drop"])
+    cint1.insert(0, np.zeros(SC_Resets1, int) + FRAME_BIT_DICT["reset"])
+    cint1.insert(1, np.zeros(SC_DropFrames1, int) + FRAME_BIT_DICT["drop"])
 
     integrations = [cint1]
     for idx in np.arange(SC_Integrations - 1):
         integrations.append(copy(cintn))
 
-    integrations[-1].append(np.zeros(SC_DropFrames3, int) + frame_dict["drop"])
+    integrations[-1].append(np.zeros(SC_DropFrames3, int) + FRAME_BIT_DICT["drop"])
     return integrations
 
 
@@ -269,7 +188,7 @@ def get_plot_vectors(inte):
     vectors : list of arrays
         List of arrays specifying the plotting parameters for each individual frame
     """
-    s = np.where(inte | frame_dict["reset"] == frame_dict["reset"])[0]
+    s = np.where(inte | FRAME_BIT_DICT["reset"] == FRAME_BIT_DICT["reset"])[0]
     if len(s) > 0:
         s = s[-1]
         y = np.hstack(
@@ -283,9 +202,9 @@ def get_plot_vectors(inte):
 
     cols = np.vstack(
         [
-            inte | frame_dict["reset"] == frame_dict["reset"],
-            inte | frame_dict["read"] == frame_dict["read"],
-            inte | frame_dict["drop"] == frame_dict["drop"],
+            inte | FRAME_BIT_DICT["reset"] == FRAME_BIT_DICT["reset"],
+            inte | FRAME_BIT_DICT["read"] == FRAME_BIT_DICT["read"],
+            inte | FRAME_BIT_DICT["drop"] == FRAME_BIT_DICT["drop"],
         ]
     ).T
     return np.hstack([y[:, None], cols])
@@ -335,7 +254,7 @@ def plot_nirda_integrations(
         SC_Integrations,
     )
     cadences = [
-        np.sum([(i == frame_dict["read"]).all() for i in inte if len(i) > 0])
+        np.sum([(i == FRAME_BIT_DICT["read"]).all() for i in inte if len(i) > 0])
         for inte in integrations
     ]
     integrations = [np.hstack(idx) for idx in integrations]
