@@ -355,9 +355,9 @@ class VisibleSim(Sim):
         _, ax = plt.subplots(n, n, figsize=(7, 6), sharex=True, sharey=True)
         plt.subplots_adjust(hspace=0.03, wspace=0.05)
         for idx in range(self.nROIs):
-            l = np.where(np.arange(self.nROIs).reshape((n, n)) == idx)
+            l = ((idx - (idx % n))//n, idx % n)
             with plt.style.context(PANDORASTYLE):
-                im = ax[l[0][0], l[1][0]].imshow(
+                im = ax[l[0], l[1]].imshow(
                     d[idx],
                     vmin=vmin,
                     vmax=vmax,
@@ -365,10 +365,10 @@ class VisibleSim(Sim):
                     origin="lower",
                     cmap="Greys",
                 )
-                if l[1][0] == 0:
-                    ax[l[0][0], l[1][0]].set(ylabel="Row\n[subarray pixel]")
-                if l[0][0] == (n - 1):
-                    ax[l[0][0], l[1][0]].set(xlabel="Column\n[subarray pixel]")
+                if l[1] == 0:
+                    ax[l[0], l[1]].set(ylabel="Row\n[subarray pixel]")
+                if l[0] == (n - 1):
+                    ax[l[0], l[1]].set(xlabel="Column\n[subarray pixel]")
         cbar = plt.colorbar(im, ax=ax)
         cbar.set_label(
             f"Counts after {(self.detector.integration_time * 50).to_string(format='latex')} [DN]"
