@@ -5,6 +5,6 @@ description = ""
 authors = ["Christina Hedges <christina.l.hedges@nasa.gov>"]
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.11"
+python = ">=3.9,<3.13"
 pandorasat = ">=0.5.20"
 pandorapsf = ">=0.2.9"
