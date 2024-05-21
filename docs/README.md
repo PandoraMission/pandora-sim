@@ -2,27 +2,40 @@
 
 # PandoraSim
 
-This Python package contains **basic** functions to simulate data from Pandora including creating estimates of, e.g. count rates from targets on the detectors.
+This Python package contains classes to simulate data from Pandora, and provides estimates for level 1 products from the spacecraft.
 
-### Installation
+## Installation
 
-Eventually you will be able to install this package via pip. For now, clone the github repository, enter the `pandora-sim` directory, and run the command `poetry install` to install the package. This will allow `pandora-sim` to be called like any other Python package.
+If you are installing the simulator and expect you will not wish to tweak any of the code internal to the simulator or any other aspects of DPC software, you can install `pandora-sim` with `pip`
 
-Make sure to upgrade regularly to get the latest functionality and Pandora metadata.
-
-
-### Example Usage
-
-Below is an example usage of some of the functionality in this package. For more in-depth walkthroughs and examples of the `pandora-sim` functionality, see the example notebooks in the `docs/` directory.
-
-```python
-import pandorasim as ps
-from astropy.coordinates import SkyCoord
-import matplotlib.pyplot as plt
-c = SkyCoord.from_name("GJ 436")
-p = ps.PandoraSim(ra=c.ra, dec=c.dec, theta=10*u.deg)
-fig = p.plot_footprint()
-plt.show()
+```
+pip install pandorasim --upgrade
 ```
 
-See our API documentation for full details on the functions available in this package.
+However, if you are either:
+
+1. Expect to tweak/update `pandorasim` or any of the Pandora software dependencies
+2. Need to run `pandorasim` in a different environment to your native environment
+
+You may want to install with `poetry`. You can do this with
+
+```
+pip install --upgrade poetry
+git clone https://github.com/PandoraMission/pandora-sim
+cd pandorasim
+poetry install
+```
+
+To run `pandorasim` you can then work however you work in Python, be make sure you
+
+1. Are working in the `pandorasim` directoy
+2. Use the correct `poetry` environment by prepending all your commands with `poetry run`. E.g. `poetry run jupyterlab`, `poetry run python`, `poetry run pytest` etc.
+
+### Dependencies
+
+This package depends on two other packages from the Pandora software ecosystem.
+
+- [`pandorasat`](https://github.com/PandoraMission/pandora-sat/)
+- [`pandorapsf`](https://github.com/PandoraMission/pandora-psf/)
+
+Each of these packages are **updated often** as we gain new insights into what to expect from Pandora. If you are working with the simulator, you should make sure to keep your versions of all packages updated.

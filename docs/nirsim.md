@@ -1,7 +1,4 @@
-# Documentation for `NIRDA`
+# Documentation for `NIRSim`
 
 ::: pandorasim.nirsim.NIRSim
     handler: python
-    rendering:
-      show_root_heading: false
-      show_source: false

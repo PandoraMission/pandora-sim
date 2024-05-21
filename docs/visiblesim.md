@@ -1,7 +1,4 @@
-# Documentation for `VISDA`
+# Documentation for `VisibleSim`
 
 ::: pandorasim.visiblesim.VisibleSim
     handler: python
-    rendering:
-      show_root_heading: false
-      show_source: false
