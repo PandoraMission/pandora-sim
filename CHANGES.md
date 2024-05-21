@@ -1,6 +1,8 @@
-# 0.6.0
+# 1.0.0
 
-- Switching to Pandora PSF
+- Switched PSF and trace functions to PandoraPSF
+- New ROI, subarray, and FFI visualization functions
+- Changed output to fits files
 
 # 0.5.1
 
