@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pandorasim"
-version = "1.0.7"
+version = "1.0.8"
 description = ""
 authors = ["Christina Hedges <christina.l.hedges@nasa.gov>"]
 

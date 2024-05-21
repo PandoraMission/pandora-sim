@@ -168,9 +168,12 @@ class VisibleSim(Sim):
 
         if noise:
             # Apply background to every read, units of electrons
-            ffi += np.random.poisson(
+            bkg = np.random.poisson(
                 (self.background_rate * int_time).value, size=ffi.shape
             ).astype(int)
+            if hasattr(self.detector, "fieldstop"):
+                bkg *= self.detector.fieldstop.astype(int)
+            ffi += bkg
 
             # # Apply a bias to every read which is a Gaussian with mean = bias * nreads value and std = (nreads * (read noise)**2)**0.5
             # We actually do this as a sum because otherwise the integer math doesn't work out...!?
