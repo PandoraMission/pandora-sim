@@ -33,7 +33,7 @@ class Sim(ABC):
     @abstractmethod
     def point(self, ra: u.Quantity, dec: u.Quantity, roll: u.Quantity):
         self.ra, self.dec, self.roll = ra, dec, roll
-        self.wcs = self.detector.get_wcs(self.ra, self.dec)
+        self.wcs = self.detector.get_wcs(self.ra, self.dec, theta=self.roll)
 
         logger.start_spinner("Finding nearby sources...")
         self.source_catalog = self._get_source_catalog()
@@ -127,6 +127,19 @@ class Sim(ABC):
             shape = self.detector.shape
         radius = np.hypot(*np.asarray(shape) // 2)
         radius = ((radius * u.pixel) * self.detector.pixel_scale).to(u.deg).value
+        
+        # If there is a fieldstop, we can stop finding sources at that radius
+        if hasattr(self.detector, "fieldstop_radius"):
+            fieldstop_radius = (
+                (
+                    (self.detector.fieldstop_radius / self.detector.pixel_size)
+                    * self.detector.pixel_scale
+                )
+                .to(u.deg)
+                .value
+            )
+            if fieldstop_radius < radius:
+                radius = fieldstop_radius
 
         # Get location and magnitude data
         cat = ps.utils.get_sky_catalog(
