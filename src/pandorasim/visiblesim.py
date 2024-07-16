@@ -140,10 +140,11 @@ class VisibleSim(Sim):
     def background_rate(self):
         return 4 * u.electron / u.second
 
-    @add_docstring("nreads")
+    @add_docstring("nreads", "noise")
     def get_FFI(
         self,
         nreads: int = 50,
+        noise=True,
     ):
         """Get a single frame of data as an FFI
 
@@ -162,35 +163,41 @@ class VisibleSim(Sim):
 
         # Apply poisson (shot) noise, ffi now has shape  (nrows, ncolumns), units of electrons
         ffi = np.random.poisson(self.scene.model(source_flux)[0])
+        if hasattr(self.detector, "fieldstop"):
+            ffi *= self.detector.fieldstop.astype(int)
 
-        # Apply background to every read, units of electrons
-        ffi += np.random.poisson(
-            (self.background_rate * int_time).value, size=ffi.shape
-        ).astype(int)
+        if noise:
+            # Apply background to every read, units of electrons
+            bkg = np.random.poisson(
+                (self.background_rate * int_time).value, size=ffi.shape
+            ).astype(int)
+            if hasattr(self.detector, "fieldstop"):
+                bkg *= self.detector.fieldstop.astype(int)
+            ffi += bkg
 
-        # # Apply a bias to every read which is a Gaussian with mean = bias * nreads value and std = (nreads * (read noise)**2)**0.5
-        # We actually do this as a sum because otherwise the integer math doesn't work out...!?
+            # # Apply a bias to every read which is a Gaussian with mean = bias * nreads value and std = (nreads * (read noise)**2)**0.5
+            # We actually do this as a sum because otherwise the integer math doesn't work out...!?
 
-        test_distribution = (
-            np.random.normal(
-                loc=self.detector.bias.value,
-                scale=self.detector.read_noise.value,
-                size=(nreads, 10000),
+            test_distribution = (
+                np.random.normal(
+                    loc=self.detector.bias.value,
+                    scale=self.detector.read_noise.value,
+                    size=(nreads, 10000),
+                )
+                .astype(int)
+                .sum(axis=0)
             )
-            .astype(int)
-            .sum(axis=0)
-        )
-        ffi += np.random.normal(
-            loc=test_distribution.mean(),
-            scale=self.detector.read_noise.value * np.sqrt(nreads),
-            size=(ffi.shape),
-        ).astype(int)
+            ffi += np.random.normal(
+                loc=test_distribution.mean(),
+                scale=self.detector.read_noise.value * np.sqrt(nreads),
+                size=(ffi.shape),
+            ).astype(int)
 
-        # Add poisson noise for the dark current to every frame, units of electrons
-        ffi += np.random.poisson(
-            lam=(self.detector.dark * int_time).value,
-            size=ffi.shape,
-        ).astype(int)
+            # Add poisson noise for the dark current to every frame, units of electrons
+            ffi += np.random.poisson(
+                lam=(self.detector.dark * int_time).value,
+                size=ffi.shape,
+            ).astype(int)
 
         # Apply gain
         #        ffi = self.detector.apply_gain(u.Quantity(ffi.ravel(), unit='electron')).value.reshape(ffi.shape)
@@ -324,7 +331,7 @@ class VisibleSim(Sim):
         data[data > 2**16] = 2**16
 
         # bin down the data across the read dimension
-        data = data.reshape((self.nROIs, nframes, nr, 50, 50)).sum(axis=2)
+        data = data.reshape((self.nROIs, nframes, nr, *self.ROI_size)).sum(axis=2)
 
         if output_type == "array":
             return data
@@ -348,9 +355,9 @@ class VisibleSim(Sim):
         _, ax = plt.subplots(n, n, figsize=(7, 6), sharex=True, sharey=True)
         plt.subplots_adjust(hspace=0.03, wspace=0.05)
         for idx in range(self.nROIs):
-            l = np.where(np.arange(self.nROIs).reshape((n, n)) == idx)
+            l = ((idx - (idx % n)) // n, idx % n)
             with plt.style.context(PANDORASTYLE):
-                im = ax[l[0][0], l[1][0]].imshow(
+                im = ax[l[0], l[1]].imshow(
                     d[idx],
                     vmin=vmin,
                     vmax=vmax,
@@ -358,10 +365,10 @@ class VisibleSim(Sim):
                     origin="lower",
                     cmap="Greys",
                 )
-                if l[1][0] == 0:
-                    ax[l[0][0], l[1][0]].set(ylabel="Row\n[subarray pixel]")
-                if l[0][0] == (n - 1):
-                    ax[l[0][0], l[1][0]].set(xlabel="Column\n[subarray pixel]")
+                if l[1] == 0:
+                    ax[l[0], l[1]].set(ylabel="Row\n[subarray pixel]")
+                if l[0] == (n - 1):
+                    ax[l[0], l[1]].set(xlabel="Column\n[subarray pixel]")
         cbar = plt.colorbar(im, ax=ax)
         cbar.set_label(
             f"Counts after {(self.detector.integration_time * 50).to_string(format='latex')} [DN]"

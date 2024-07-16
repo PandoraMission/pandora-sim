@@ -1,10 +1,11 @@
 [tool.poetry]
 name = "pandorasim"
-version = "1.0.0"
+version = "1.0.10"
 description = ""
 authors = ["Christina Hedges <christina.l.hedges@nasa.gov>"]
 
 [tool.poetry.dependencies]
+pyarrow = "<17.0.0"
 python = ">=3.9,<3.13"
-pandorasat = ">=0.5.20"
-pandorapsf = ">=0.2.9"
+pandorasat = ">=0.5.22"
+pandorapsf = ">=0.2.11"
