@@ -127,7 +127,7 @@ class Sim(ABC):
             shape = self.detector.shape
         radius = np.hypot(*np.asarray(shape) // 2)
         radius = ((radius * u.pixel) * self.detector.pixel_scale).to(u.deg).value
-        
+
         # If there is a fieldstop, we can stop finding sources at that radius
         if hasattr(self.detector, "fieldstop_radius"):
             fieldstop_radius = (

@@ -355,7 +355,7 @@ class VisibleSim(Sim):
         _, ax = plt.subplots(n, n, figsize=(7, 6), sharex=True, sharey=True)
         plt.subplots_adjust(hspace=0.03, wspace=0.05)
         for idx in range(self.nROIs):
-            l = ((idx - (idx % n))//n, idx % n)
+            l = ((idx - (idx % n)) // n, idx % n)
             with plt.style.context(PANDORASTYLE):
                 im = ax[l[0], l[1]].imshow(
                     d[idx],
