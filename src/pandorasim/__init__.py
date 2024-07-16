@@ -1,4 +1,4 @@
-__version__ = "1.0.0"
+__version__ = "1.0.10"
 # Standard library
 import os  # noqa
 

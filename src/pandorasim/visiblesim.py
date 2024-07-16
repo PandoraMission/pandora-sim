@@ -331,7 +331,7 @@ class VisibleSim(Sim):
         data[data > 2**16] = 2**16
 
         # bin down the data across the read dimension
-        data = data.reshape((self.nROIs, nframes, nr, 50, 50)).sum(axis=2)
+        data = data.reshape((self.nROIs, nframes, nr, *self.ROI_size)).sum(axis=2)
 
         if output_type == "array":
             return data
