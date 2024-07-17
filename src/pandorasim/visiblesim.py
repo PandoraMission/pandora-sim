@@ -1,4 +1,5 @@
 """Simulator for Visible Detector"""
+
 from copy import deepcopy
 
 import astropy.units as u
@@ -13,7 +14,7 @@ from pandorasat import PANDORASTYLE, VisibleDetector, get_logger
 from . import __version__
 from .docstrings import add_docstring
 from .sim import Sim
-from .utils import get_jitter
+from .utils import get_jitter, normalize, calc_intensity_differences
 
 __all__ = ["VisibleSim"]
 
@@ -35,7 +36,9 @@ class VisibleSim(Sim):
         self.nROIs = nROIs
 
     @add_docstring("nROIs")
-    def select_ROI_corners(self, nROIs, magnitude_limit=14):
+    def select_ROI_corners(
+        self, nROIs, magnitude_limit=14, contam_rad=25, contam_threshold=10
+    ):
         """Selects the corners of ROIs.
 
         This is currently a placeholder. SOC will provide direction on how ROIs will be selected.
@@ -43,26 +46,75 @@ class VisibleSim(Sim):
         Parameters:
         -----------
         magnitude_limit : float
-            Visual magnitude limit down to which ROI targets will be considered.
+            Visual magnitude limit down to which ROI targets will be considered. Default is 14.
+        contam_rad : float
+            Radius in pixels within which to consider contamination from crowding for a given
+            ROI. Default is 25.
+        contam_threshold : float
+            Value dictating above which the ratio of star flux to all nearby flux is acceptable.
+            Stars with contamination ratios below this value will be discarded, e.g. stars whose
+            flux is less than 10 times the sum of flux from nearby stars will be discarded.
+            Default is 10.
         """
-        source_mag = deepcopy(np.asarray(self.source_catalog.mag))
+        source_cat = deepcopy(np.asarray(self.source_catalog))
         locations = deepcopy(self.locations)
 
-        # This downweights sources far from the middle
-        r = 1 - np.hypot(
+        # Get functional form of PRF maxima Gaussian fit
+        _, A_fit, sigma_fit = pp.PSF.from_name("visda").calc_prf_maxima()
+
+        # Weight stars based on PRF maximum value
+        pixel_sep = np.hypot(
             *(self.locations - np.asarray(self.detector.shape) / 2).T
         ) / np.hypot(*np.asarray(self.detector.shape))
-        source_mag += -2.5 * np.log10(r)
+        prf_vals = pp.utils.gaussian(pixel_sep, A_fit, sigma_fit)
+        prf_weights = normalize(
+            prf_vals, maximum=pp.utils.gaussian(0, A_fit, sigma_fit), low_offset=0.25
+        )
 
-        k = (source_mag < magnitude_limit) & (self.source_catalog.ruwe <= 1.2)
-        locations, source_mag = locations[k], source_mag[k]
+        # Weight stars by brightness
+        mag_weights = normalize(self.source_catalog.flux)
+
+        # Calculate the contamination of each star by nearby stars within a given radius
+        intensity_ratios = calc_intensity_differences(
+            locations, self.source_catalog.flux, contam_rad
+        )
+        intensity_weights = normalize(intensity_ratios)
+        source_cat["intensity_ratio"] = intensity_weights
+
+        # Combine all target weights
+        target_weights = prf_weights * mag_weights * intensity_weights
+        # source_cat["target_weight"] = target_weights
+        self.target_weights = target_weights
+        print(target_weights)
+
+        # Remove stars that are too close to target or edge of fieldstop, stars
+        # that are either too dim or might saturate the detector, and stars that
+        # are not free of contamination above some threshold
+        k = (
+            (pixel_sep < 1998)
+            & (pixel_sep > 50)
+            & (source_cat.mag > 8)
+            & (source_cat.mag < magnitude_limit)
+            & (source_cat.intensity_ratio > contam_threshold)
+        )
+        locations, target_weights = locations[k], target_weights[k]
+
+        # This downweights sources far from the middle
+        # r = 1 - np.hypot(
+        #     *(self.locations - np.asarray(self.detector.shape) / 2).T
+        # ) / np.hypot(*np.asarray(self.detector.shape))
+        # source_mag += -2.5 * np.log10(r)
+
+        # k = (source_mag < magnitude_limit) & (self.source_catalog.ruwe <= 1.2)
+        # locations, source_mag = locations[k], source_mag[k]
         size = np.asarray(self.ROI_size)
         crpix = self.wcs.wcs.crpix
         corners = [(-size[0] // 2 + crpix[0], -size[1] // 2 + crpix[1])]
         while len(corners) < nROIs:
             if len(locations) == 0:
                 raise ValueError(f"Can not select {nROIs} ROIs")
-            idx = np.argmin(source_mag)
+            # idx = np.argmin(source_mag)
+            idx = np.argmax(target_weights)
             corner = np.round(locations[idx]).astype(int) - size // 2
             if ~np.any(
                 [
@@ -75,7 +127,8 @@ class VisibleSim(Sim):
 
             k = ~np.in1d(np.arange(len(locations)), idx)
             locations = locations[k]
-            source_mag = source_mag[k]
+            # source_mag = source_mag[k]
+            target_weights = target_weights[k]
         return corners
 
     @add_docstring("ra", "dec", "theta")
