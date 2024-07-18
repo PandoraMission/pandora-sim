@@ -1,3 +1,7 @@
+# 1.0.11
+- Integrated new ROI prioritization functions
+- Added normalization and intensity difference functions to utils
+
 # 1.0.0
 
 - Switched PSF and trace functions to PandoraPSF
