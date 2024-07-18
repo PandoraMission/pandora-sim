@@ -56,16 +56,14 @@ class VisibleSim(Sim):
             flux is less than 10 times the sum of flux from nearby stars will be discarded.
             Default is 10.
         """
-        source_cat = deepcopy(np.asarray(self.source_catalog))
+        source_cat = deepcopy(self.source_catalog)
         locations = deepcopy(self.locations)
 
         # Get functional form of PRF maxima Gaussian fit
         _, A_fit, sigma_fit = pp.PSF.from_name("visda").calc_prf_maxima()
 
         # Weight stars based on PRF maximum value
-        pixel_sep = np.hypot(
-            *(self.locations - np.asarray(self.detector.shape) / 2).T
-        ) / np.hypot(*np.asarray(self.detector.shape))
+        pixel_sep = np.hypot(*(self.locations - np.asarray(self.detector.shape) / 2).T)
         prf_vals = pp.utils.gaussian(pixel_sep, A_fit, sigma_fit)
         prf_weights = normalize(
             prf_vals, maximum=pp.utils.gaussian(0, A_fit, sigma_fit), low_offset=0.25
@@ -79,13 +77,11 @@ class VisibleSim(Sim):
             locations, self.source_catalog.flux, contam_rad
         )
         intensity_weights = normalize(intensity_ratios)
-        source_cat["intensity_ratio"] = intensity_weights
+        # source_cat["intensity_ratio"] = intensity_weights
 
         # Combine all target weights
         target_weights = prf_weights * mag_weights * intensity_weights
-        # source_cat["target_weight"] = target_weights
         self.target_weights = target_weights
-        print(target_weights)
 
         # Remove stars that are too close to target or edge of fieldstop, stars
         # that are either too dim or might saturate the detector, and stars that
@@ -95,25 +91,17 @@ class VisibleSim(Sim):
             & (pixel_sep > 50)
             & (source_cat.mag > 8)
             & (source_cat.mag < magnitude_limit)
-            & (source_cat.intensity_ratio > contam_threshold)
+            & (intensity_ratios > contam_threshold)
         )
         locations, target_weights = locations[k], target_weights[k]
 
-        # This downweights sources far from the middle
-        # r = 1 - np.hypot(
-        #     *(self.locations - np.asarray(self.detector.shape) / 2).T
-        # ) / np.hypot(*np.asarray(self.detector.shape))
-        # source_mag += -2.5 * np.log10(r)
-
-        # k = (source_mag < magnitude_limit) & (self.source_catalog.ruwe <= 1.2)
-        # locations, source_mag = locations[k], source_mag[k]
+        # Finding the corner of the ROIs for the ranked stars
         size = np.asarray(self.ROI_size)
         crpix = self.wcs.wcs.crpix
         corners = [(-size[0] // 2 + crpix[0], -size[1] // 2 + crpix[1])]
         while len(corners) < nROIs:
             if len(locations) == 0:
                 raise ValueError(f"Can not select {nROIs} ROIs")
-            # idx = np.argmin(source_mag)
             idx = np.argmax(target_weights)
             corner = np.round(locations[idx]).astype(int) - size // 2
             if ~np.any(
@@ -127,7 +115,6 @@ class VisibleSim(Sim):
 
             k = ~np.in1d(np.arange(len(locations)), idx)
             locations = locations[k]
-            # source_mag = source_mag[k]
             target_weights = target_weights[k]
         return corners
 
