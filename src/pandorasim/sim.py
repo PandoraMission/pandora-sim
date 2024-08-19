@@ -1,4 +1,5 @@
 """Abstract base class for a Simulator object"""
+
 from abc import ABC, abstractmethod
 from copy import deepcopy
 

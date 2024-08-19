@@ -21,9 +21,9 @@ def select_ROI_corners(
     locations: pd.DataFrame,
     theta: u.Quantity = 0 * u.deg,
     ROI_size: tuple = (50, 50),
-    magnitude_limit: float = 14.,
-    contam_rad: float = 25.,
-    contam_threshold: float = 10.,
+    magnitude_limit: float = 14.0,
+    contam_rad: float = 25.0,
+    contam_threshold: float = 10.0,
 ):
     """Selects the corners of ROIs.
 
