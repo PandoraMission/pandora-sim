@@ -1,7 +1,5 @@
 """Simulator for Visible Detector"""
 
-from copy import deepcopy
-
 import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,7 +12,8 @@ from pandorasat import PANDORASTYLE, VisibleDetector, get_logger
 from . import __version__
 from .docstrings import add_docstring
 from .sim import Sim
-from .utils import get_jitter, normalize, calc_intensity_differences
+from .utils import get_jitter
+from .roi import select_ROI_corners
 
 __all__ = ["VisibleSim"]
 
@@ -35,89 +34,6 @@ class VisibleSim(Sim):
         self.ROI_size = ROI_size
         self.nROIs = nROIs
 
-    @add_docstring("nROIs")
-    def select_ROI_corners(
-        self, nROIs, magnitude_limit=14, contam_rad=25, contam_threshold=10
-    ):
-        """Selects the corners of ROIs.
-
-        This is currently a placeholder. SOC will provide direction on how ROIs will be selected.
-
-        Parameters:
-        -----------
-        magnitude_limit : float
-            Visual magnitude limit down to which ROI targets will be considered. Default is 14.
-        contam_rad : float
-            Radius in pixels within which to consider contamination from crowding for a given
-            ROI. Default is 25.
-        contam_threshold : float
-            Value dictating above which the ratio of star flux to all nearby flux is acceptable.
-            Stars with contamination ratios below this value will be discarded, e.g. stars whose
-            flux is less than 10 times the sum of flux from nearby stars will be discarded.
-            Default is 10.
-        """
-        source_cat = deepcopy(self.source_catalog)
-        locations = deepcopy(self.locations)
-
-        # Get functional form of PRF maxima Gaussian fit
-        _, A_fit, sigma_fit = pp.PSF.from_name("visda").calc_prf_maxima()
-
-        # Weight stars based on PRF maximum value
-        pixel_sep = np.hypot(*(self.locations - np.asarray(self.detector.shape) / 2).T)
-        prf_vals = pp.utils.gaussian(pixel_sep, A_fit, sigma_fit)
-        prf_weights = normalize(
-            prf_vals, maximum=pp.utils.gaussian(0, A_fit, sigma_fit), low_offset=0.25
-        )
-
-        # Weight stars by brightness
-        mag_weights = normalize(self.source_catalog.flux)
-
-        # Calculate the contamination of each star by nearby stars within a given radius
-        intensity_ratios = calc_intensity_differences(
-            locations, self.source_catalog.flux, contam_rad
-        )
-        intensity_weights = normalize(intensity_ratios)
-        # source_cat["intensity_ratio"] = intensity_weights
-
-        # Combine all target weights
-        target_weights = prf_weights * mag_weights * intensity_weights
-        self.target_weights = target_weights
-
-        # Remove stars that are too close to target or edge of fieldstop, stars
-        # that are either too dim or might saturate the detector, and stars that
-        # are not free of contamination above some threshold
-        k = (
-            (pixel_sep < 1998)
-            & (pixel_sep > 50)
-            & (source_cat.mag > 8)
-            & (source_cat.mag < magnitude_limit)
-            & (intensity_ratios > contam_threshold)
-        )
-        locations, target_weights = locations[k], target_weights[k]
-
-        # Finding the corner of the ROIs for the ranked stars
-        size = np.asarray(self.ROI_size)
-        crpix = self.wcs.wcs.crpix
-        corners = [(-size[0] // 2 + crpix[0], -size[1] // 2 + crpix[1])]
-        while len(corners) < nROIs:
-            if len(locations) == 0:
-                raise ValueError(f"Can not select {nROIs} ROIs")
-            idx = np.argmax(target_weights)
-            corner = np.round(locations[idx]).astype(int) - size // 2
-            if ~np.any(
-                [
-                    (np.abs(c[0] - corner[0]) < size[0] // 2)
-                    & (np.abs(c[1] - corner[1]) < size[1] // 2)
-                    for c in corners
-                ]
-            ):
-                corners.append(tuple(c for c in corner))
-
-            k = ~np.in1d(np.arange(len(locations)), idx)
-            locations = locations[k]
-            target_weights = target_weights[k]
-        return corners
-
     @add_docstring("ra", "dec", "theta")
     def point(self, ra, dec, roll):
         """
@@ -132,7 +48,14 @@ class VisibleSim(Sim):
             corner=(-self.detector.shape[0] // 2, -self.detector.shape[1] // 2),
         )
         logger.stop_spinner()
-        self.ROI_corners = self.select_ROI_corners(self.nROIs)
+        self.ROI_corners, self.ROI_center_coords = select_ROI_corners(
+            self.ra,
+            self.dec,
+            self.nROIs,
+            self.source_catalog,
+            self.locations,
+            theta=self.roll,
+        )
 
         logger.start_spinner("Building ROI scene object...")
 
