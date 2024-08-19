@@ -335,37 +335,6 @@ def save_to_FITS(
     hdul.writeto(filename, overwrite=overwrite)
 
 
-def normalize(values, maximum=None, minimum=None, low_offset=0):
-    """Normalizes an arbitrary set of values between 1 and some arbitrary value <1.
-
-    Parameters
-    ----------
-    values : np.ndarray
-        Values to normalize.
-    maximum : float or None
-        Maximum value to set as 1 when normalized. If None, the maximum value in the specified
-        `values` will be used.
-    minimum : float or None
-        Maximum value to set as 0 or the `low_offset` when normalized. If None, the minimum value
-        in the specified `values` will be used.
-    low_offset : float
-        The lower bound of the normalized set, i.e. the `values` will be normalized between
-        1 and this value. Default is 0.
-
-    Returns
-    -------
-    norm_vals : np.ndarray
-        Normalized values.
-    """
-    if maximum is None:
-        maximum = np.amax(values)
-    if minimum is None:
-        minimum = np.amin(values)
-    norm_arr = (values - minimum) / (maximum - minimum)
-    norm_vals = low_offset + (norm_arr * (1 - low_offset))
-    return norm_vals
-
-
 def calc_intensity_differences(coords, intensity_vals, radius):
     """
     Calculate the ratio of the value of each point in a given set of points to the sum of the values of
