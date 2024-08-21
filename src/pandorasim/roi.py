@@ -1,11 +1,11 @@
 """Functions pertaining to ROI selection"""
 
-# from copy import deepcopy
+from importlib import resources as impresources
 
 import numpy as np
 import astropy.units as u
 import pandas as pd
-import pandorapsf as pp
+from pandorapsf import data
 from pandorasat import VisibleDetector
 
 from .docstrings import add_docstring
@@ -46,9 +46,6 @@ def select_ROI_corners(
 
     center_coords = [tuple((source_cat.ra[0], source_cat.dec[0]))]
 
-    # Get functional form of PRF maxima Gaussian fit
-    _, A_fit, sigma_fit = pp.PSF.from_name("visda").calc_prf_maxima()
-
     # Define a custom normalization function for use in calculating weights
     def normalize(values, maximum=None, minimum=None, low_offset=0):
         """Normalizes an arbitrary set of values between 1 and some arbitrary value <1.
@@ -80,11 +77,21 @@ def select_ROI_corners(
         norm_vals = low_offset + (norm_arr * (1 - low_offset))
         return norm_vals
 
+    def gaussian(r, A, sigma):
+        """Function defining an axisymmetric Gaussian centered on the origin"""
+        val = A * np.exp(-(r**2) / (2 * sigma**2))
+        return val
+
+    # Get functional form of PRF maxima Gaussian fit
+    # _, A_fit, sigma_fit = pp.PSF.from_name("visda").calc_prf_maxima()
+    gauss_params = impresources.files(data) / "prf_gauss_params.csv"
+    A_fit, sigma_fit = np.loadtxt(gauss_params, unpack=True)
+
     # Weight stars based on PRF maximum value
     pixel_sep = np.hypot(*(locations - np.asarray(detector.shape) / 2).T)
-    prf_vals = pp.utils.gaussian(pixel_sep, A_fit, sigma_fit)
+    prf_vals = gaussian(pixel_sep, A_fit, sigma_fit)
     prf_weights = normalize(
-        prf_vals, maximum=pp.utils.gaussian(0, A_fit, sigma_fit), low_offset=0.25
+        prf_vals, maximum=gaussian(0, A_fit, sigma_fit), low_offset=0.25
     )
 
     # Weight stars by brightness
