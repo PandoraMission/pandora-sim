@@ -116,6 +116,7 @@ def select_ROI_corners(
         & (source_cat.mag > 8)
         & (source_cat.mag < magnitude_limit)
         & (intensity_ratios > contam_threshold)
+        & (source_cat.ruwe < 1.2)
     )
     locations, target_weights, source_cat = (
         locations[k],
