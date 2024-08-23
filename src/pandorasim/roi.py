@@ -111,7 +111,7 @@ def select_ROI_corners(
     # that are either too dim or might saturate the detector, and stars that
     # are not free of contamination above some threshold
     k = (
-        (pixel_sep < 1998)
+        (pixel_sep < 974)
         & (pixel_sep > 50)
         & (source_cat.mag > 8)
         & (source_cat.mag < magnitude_limit)
