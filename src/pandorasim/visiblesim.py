@@ -52,8 +52,8 @@ class VisibleSim(Sim):
             self.ra,
             self.dec,
             self.nROIs,
-            self.source_catalog,
-            self.locations,
+            source_catalog=self.source_catalog,
+            locations=self.locations,
             theta=self.roll,
         )
 
