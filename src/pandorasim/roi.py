@@ -1,12 +1,14 @@
 """Functions pertaining to ROI selection"""
 
 from importlib import resources as impresources
+from typing import Union
+from copy import deepcopy
 
 import numpy as np
 import astropy.units as u
 import pandas as pd
 from pandorapsf import data
-from pandorasat import VisibleDetector
+import pandorasat as ps
 
 from .docstrings import add_docstring
 from .utils import calc_intensity_differences
@@ -17,9 +19,10 @@ def select_ROI_corners(
     ra: float,
     dec: float,
     nROIs: int,
-    source_cat: pd.DataFrame,
-    locations: pd.DataFrame,
+    source_cat: Union[pd.DataFrame, None] = None,
+    locations: Union[pd.DataFrame, None] = None,
     theta: u.Quantity = 0 * u.deg,
+    distortion: bool = True,
     ROI_size: tuple = (50, 50),
     magnitude_limit: float = 14.0,
     contam_rad: float = 25.0,
@@ -42,7 +45,111 @@ def select_ROI_corners(
         flux is less than 10 times the sum of flux from nearby stars will be discarded.
         Default is 10.
     """
-    detector = VisibleDetector()
+    detector = ps.VisibleDetector()
+
+    if source_cat is None:
+        radius = (
+            ((detector.fieldstop_radius / detector.pixel_size) * detector.pixel_scale)
+            .to(u.deg)
+            .value
+        )
+        cat = ps.utils.get_sky_catalog(
+            ra=ra, dec=dec, radius=radius * u.deg, gbpmagnitude_range=(-6, 18)
+        )
+
+        cat_ra, cat_dec, mag = (
+            cat["coords"].ra.deg,
+            cat["coords"].dec.deg,
+            cat["bmag"],
+        )
+
+        wcs = detector.get_wcs(ra, dec, theta=theta)
+        coords = np.vstack(
+            [
+                (cat_ra.to(u.deg).value if isinstance(cat_ra, u.Quantity) else cat_ra),
+                (
+                    cat_dec.to(u.deg).value
+                    if isinstance(cat_dec, u.Quantity)
+                    else cat_dec
+                ),
+            ]
+        ).T
+
+        if distortion:
+            column, row = wcs.all_world2pix(coords, 0).T
+        else:
+            column, row = wcs.wcs_world2pix(coords, 0).T
+
+        pix_coords = np.vstack([row, column])
+
+        shape = detector.shape
+        p = detector.trace_pixel.value
+        p = p.max() - p.min()
+        psf_shape = (p + 6, 6)
+
+        k = (
+            np.abs(pix_coords[0] - shape[0] / 2) < (shape[0] / 2 + psf_shape[0] / 2)
+        ) & (np.abs(pix_coords[1] - shape[1] / 2) < (shape[1] / 2 + psf_shape[1] / 2))
+
+        new_cat = deepcopy(cat)
+        for key, item in new_cat.items():
+            new_cat[key] = item[k]
+        pix_coords, cat_ra, cat_dec, mag = (
+            pix_coords[:, k],
+            cat_ra[k],
+            cat_dec[k],
+            mag[k],
+        )
+
+        source_cat = (
+            pd.DataFrame(
+                np.vstack(
+                    [
+                        cat_ra,
+                        cat_dec,
+                        mag,
+                        *pix_coords,
+                        new_cat["jmag"],
+                        new_cat["teff"].value,
+                        new_cat["logg"],
+                        new_cat["RUWE"],
+                        new_cat["ang_sep"].value,
+                    ]
+                ).T,
+                columns=[
+                    "ra",
+                    "dec",
+                    "mag",
+                    "row",
+                    "column",
+                    "jmag",
+                    "teff",
+                    "logg",
+                    "ruwe",
+                    "ang_sep",
+                ],
+            )
+            .drop_duplicates(["ra", "dec", "mag"])
+            .reset_index(drop=True)
+        )
+
+        vis_counts = np.zeros(len(source_cat))
+        vis_flux = np.zeros(len(source_cat))
+        wav = np.arange(100, 1000) * u.nm
+        s = np.trapz(detector.sensitivity(wav), wav)
+        for idx, m in enumerate(np.asarray(source_cat.mag)):
+            f = detector.flux_from_mag(m)
+            vis_flux[idx] = f.value
+            # counts in electron/u.second
+            vis_counts[idx] = (f * s).to(u.electron / u.second).value
+
+        source_cat["counts"] = vis_counts
+        source_cat["flux"] = vis_flux
+
+        locations = None
+
+    if locations is None:
+        locations = np.asarray([source_cat.row, source_cat.column]).T
 
     center_coords = [tuple((source_cat.ra[0], source_cat.dec[0]))]
 
