@@ -48,11 +48,11 @@ class VisibleSim(Sim):
             corner=(-self.detector.shape[0] // 2, -self.detector.shape[1] // 2),
         )
         logger.stop_spinner()
-        self.ROI_corners, self.ROI_center_coords = select_ROI_corners(
+        self.ROI_corners, self.ROI_center_coords, self.star_roi = select_ROI_corners(
             self.ra,
             self.dec,
             self.nROIs,
-            source_catalog=self.source_catalog,
+            source_cat=self.source_catalog,
             locations=self.locations,
             theta=self.roll,
         )
