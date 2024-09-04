@@ -7,11 +7,50 @@ from copy import deepcopy
 import numpy as np
 import astropy.units as u
 import pandas as pd
+from scipy.spatial import Voronoi, distance
 from pandorapsf import data
 import pandorasat as ps
 
 from .docstrings import add_docstring
 from .utils import calc_intensity_differences
+
+
+def gaussian(r, A, sigma):
+    """Function defining an axisymmetric Gaussian centered on the origin"""
+    val = A * np.exp(-(r**2) / (2 * sigma**2))
+    return val
+
+
+# Define a custom normalization function for use in calculating weights
+def normalize(values, maximum=None, minimum=None, low_offset=0):
+    """Normalizes an arbitrary set of values between 1 and some arbitrary value <1.
+
+    Parameters
+    ----------
+    values : np.ndarray
+        Values to normalize.
+    maximum : float or None
+        Maximum value to set as 1 when normalized. If None, the maximum value in the specified
+        `values` will be used.
+    minimum : float or None
+        Maximum value to set as 0 or the `low_offset` when normalized. If None, the minimum value
+        in the specified `values` will be used.
+    low_offset : float
+        The lower bound of the normalized set, i.e. the `values` will be normalized between
+        1 and this value. Default is 0.
+
+    Returns
+    -------
+    norm_vals : np.ndarray
+        Normalized values.
+    """
+    if maximum is None:
+        maximum = np.amax(values)
+    if minimum is None:
+        minimum = np.amin(values)
+    norm_arr = (values - minimum) / (maximum - minimum)
+    norm_vals = low_offset + (norm_arr * (1 - low_offset))
+    return norm_vals
 
 
 @add_docstring("nROIs")
@@ -46,6 +85,7 @@ def select_ROI_corners(
         Default is 10.
     """
     detector = ps.VisibleDetector()
+    wcs = detector.get_wcs(ra, dec, theta=theta)
 
     if source_cat is None:
         radius = (
@@ -63,7 +103,6 @@ def select_ROI_corners(
             cat["bmag"],
         )
 
-        wcs = detector.get_wcs(ra, dec, theta=theta)
         coords = np.vstack(
             [
                 (cat_ra.to(u.deg).value if isinstance(cat_ra, u.Quantity) else cat_ra),
@@ -153,44 +192,7 @@ def select_ROI_corners(
 
     center_coords = [tuple((source_cat.ra[0], source_cat.dec[0]))]
 
-    # Define a custom normalization function for use in calculating weights
-    def normalize(values, maximum=None, minimum=None, low_offset=0):
-        """Normalizes an arbitrary set of values between 1 and some arbitrary value <1.
-
-        Parameters
-        ----------
-        values : np.ndarray
-            Values to normalize.
-        maximum : float or None
-            Maximum value to set as 1 when normalized. If None, the maximum value in the specified
-            `values` will be used.
-        minimum : float or None
-            Maximum value to set as 0 or the `low_offset` when normalized. If None, the minimum value
-            in the specified `values` will be used.
-        low_offset : float
-            The lower bound of the normalized set, i.e. the `values` will be normalized between
-            1 and this value. Default is 0.
-
-        Returns
-        -------
-        norm_vals : np.ndarray
-            Normalized values.
-        """
-        if maximum is None:
-            maximum = np.amax(values)
-        if minimum is None:
-            minimum = np.amin(values)
-        norm_arr = (values - minimum) / (maximum - minimum)
-        norm_vals = low_offset + (norm_arr * (1 - low_offset))
-        return norm_vals
-
-    def gaussian(r, A, sigma):
-        """Function defining an axisymmetric Gaussian centered on the origin"""
-        val = A * np.exp(-(r**2) / (2 * sigma**2))
-        return val
-
     # Get functional form of PRF maxima Gaussian fit
-    # _, A_fit, sigma_fit = pp.PSF.from_name("visda").calc_prf_maxima()
     gauss_params = impresources.files(data) / "prf_gauss_params.csv"
     A_fit, sigma_fit = np.loadtxt(gauss_params, unpack=True)
 
@@ -209,7 +211,6 @@ def select_ROI_corners(
         locations, source_cat.flux, contam_rad
     )
     intensity_weights = normalize(intensity_ratios)
-    # source_cat["intensity_ratio"] = intensity_weights
 
     # Combine all target weights
     target_weights = prf_weights * mag_weights * intensity_weights
@@ -235,22 +236,84 @@ def select_ROI_corners(
     size = np.asarray(ROI_size)
     crpix = detector.get_wcs(ra, dec, theta=theta).wcs.crpix
     corners = [(-size[0] // 2 + crpix[0], -size[1] // 2 + crpix[1])]
+    star_roi = [True]
+    vertices = np.array([])
+    star_roi_flag = True
     while len(corners) < nROIs:
-        if len(locations) == 0:
-            raise ValueError(f"Can not select {nROIs} ROIs")
-        idx = np.argmax(target_weights)
-        corner = np.round(locations[idx]).astype(int) - size // 2
-        if ~np.any(
-            [
-                (np.abs(c[0] - corner[0]) < size[0] // 2)
-                & (np.abs(c[1] - corner[1]) < size[1] // 2)
-                for c in corners
-            ]
-        ):
-            corners.append(tuple(c for c in corner))
-            center_coords.append(tuple((source_cat.ra[idx], source_cat.dec[idx])))
+        if len(locations) > 0:
+            idx = np.argmax(target_weights)
+            corner = np.round(locations[idx]).astype(int) - size // 2
+            if ~np.any(
+                [
+                    (np.abs(c[0] - corner[0]) < size[0] // 2)
+                    & (np.abs(c[1] - corner[1]) < size[1] // 2)
+                    for c in corners
+                ]
+            ):
+                corners.append(tuple(c for c in corner))
+                center_coords.append(tuple((source_cat.ra[idx], source_cat.dec[idx])))
 
-        k = ~np.in1d(np.arange(len(locations)), idx)
-        locations = locations[k]
-        target_weights = target_weights[k]
-    return corners, center_coords
+            k = ~np.in1d(np.arange(len(locations)), idx)
+            locations = locations[k]
+            target_weights = target_weights[k]
+            source_cat = source_cat.loc[k].reset_index(drop=True)
+            star_roi.append(star_roi_flag)
+
+        else:
+            vor = Voronoi(center_coords)
+
+            centered_points = np.array(
+                [
+                    (x[0] - center_coords[0][0], x[1] - center_coords[0][1])
+                    for x in vor.vertices
+                ]
+            )
+            dist_to_center = np.linalg.norm(centered_points, axis=1)
+
+            idx = np.where(
+                (dist_to_center > (50 * u.pix * detector.pixel_scale).to(u.deg).value)
+                & (
+                    dist_to_center
+                    < (974 * u.pix * detector.pixel_scale).to(u.deg).value
+                )
+            )[0]
+            vertices = vor.vertices[idx]
+
+            dist_to_stars = distance.cdist(vertices, center_coords)
+
+            idx = np.where(
+                np.all(
+                    dist_to_stars
+                    > (25 * np.sqrt(2) * u.pix * detector.pixel_scale).to(u.deg).value,
+                    axis=1,
+                )
+            )[0]
+            dist_to_stars = dist_to_stars[idx]
+            vertices = vertices[idx]
+
+            target_weights = np.min(dist_to_stars, axis=1)
+
+            if distortion:
+                column, row = wcs.all_world2pix(vertices, 0).T
+            else:
+                column, row = wcs.wcs_world2pix(vertices, 0).T
+            pix_coords = np.vstack([row, column])
+
+            shape = detector.shape
+            p = detector.trace_pixel.value
+            p = p.max() - p.min()
+            psf_shape = (p + 6, 6)
+
+            k = (
+                np.abs(pix_coords[0] - shape[0] / 2) < (shape[0] / 2 + psf_shape[0] / 2)
+            ) & (
+                np.abs(pix_coords[1] - shape[1] / 2) < (shape[1] / 2 + psf_shape[1] / 2)
+            )
+            locations = np.asarray(pix_coords[:, k]).T
+            vertices = vertices[k]
+            target_weights = target_weights[k]
+
+            source_cat = pd.DataFrame({"ra": vertices[:, 0], "dec": vertices[:, 1]})
+            star_roi_flag = False
+
+    return corners, center_coords, star_roi
