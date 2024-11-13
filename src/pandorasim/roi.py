@@ -48,6 +48,8 @@ def normalize(values, maximum=None, minimum=None, low_offset=0):
         maximum = np.amax(values)
     if minimum is None:
         minimum = np.amin(values)
+    if minimum == maximum:
+        return np.ones(len(values))
     norm_arr = (values - minimum) / (maximum - minimum)
     norm_vals = low_offset + (norm_arr * (1 - low_offset))
     return norm_vals
