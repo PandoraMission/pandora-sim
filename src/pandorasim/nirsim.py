@@ -1,4 +1,5 @@
 """Simulator for Visible Detector"""
+
 import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
@@ -223,9 +224,11 @@ class NIRSim(Sim):
                         (
                             np.hstack(
                                 [
-                                    np.zeros(len(i), bool)
-                                    if idx != jdx
-                                    else np.ones(len(i), bool)
+                                    (
+                                        np.zeros(len(i), bool)
+                                        if idx != jdx
+                                        else np.ones(len(i), bool)
+                                    )
                                     for jdx, i in enumerate(integration_info)
                                 ]
                             )

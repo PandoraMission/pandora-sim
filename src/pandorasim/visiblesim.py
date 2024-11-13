@@ -1,5 +1,4 @@
 """Simulator for Visible Detector"""
-from copy import deepcopy
 
 import astropy.units as u
 import matplotlib.pyplot as plt
@@ -14,6 +13,7 @@ from . import __version__
 from .docstrings import add_docstring
 from .sim import Sim
 from .utils import get_jitter
+from .roi import select_ROI_corners
 
 __all__ = ["VisibleSim"]
 
@@ -34,50 +34,6 @@ class VisibleSim(Sim):
         self.ROI_size = ROI_size
         self.nROIs = nROIs
 
-    @add_docstring("nROIs")
-    def select_ROI_corners(self, nROIs, magnitude_limit=14):
-        """Selects the corners of ROIs.
-
-        This is currently a placeholder. SOC will provide direction on how ROIs will be selected.
-
-        Parameters:
-        -----------
-        magnitude_limit : float
-            Visual magnitude limit down to which ROI targets will be considered.
-        """
-        source_mag = deepcopy(np.asarray(self.source_catalog.mag))
-        locations = deepcopy(self.locations)
-
-        # This downweights sources far from the middle
-        r = 1 - np.hypot(
-            *(self.locations - np.asarray(self.detector.shape) / 2).T
-        ) / np.hypot(*np.asarray(self.detector.shape))
-        source_mag += -2.5 * np.log10(r)
-
-        k = (source_mag < magnitude_limit) & (self.source_catalog.ruwe <= 1.2)
-        locations, source_mag = locations[k], source_mag[k]
-        size = np.asarray(self.ROI_size)
-        crpix = self.wcs.wcs.crpix
-        corners = [(-size[0] // 2 + crpix[0], -size[1] // 2 + crpix[1])]
-        while len(corners) < nROIs:
-            if len(locations) == 0:
-                raise ValueError(f"Can not select {nROIs} ROIs")
-            idx = np.argmin(source_mag)
-            corner = np.round(locations[idx]).astype(int) - size // 2
-            if ~np.any(
-                [
-                    (np.abs(c[0] - corner[0]) < size[0] // 2)
-                    & (np.abs(c[1] - corner[1]) < size[1] // 2)
-                    for c in corners
-                ]
-            ):
-                corners.append(tuple(c for c in corner))
-
-            k = ~np.in1d(np.arange(len(locations)), idx)
-            locations = locations[k]
-            source_mag = source_mag[k]
-        return corners
-
     @add_docstring("ra", "dec", "theta")
     def point(self, ra, dec, roll):
         """
@@ -92,7 +48,14 @@ class VisibleSim(Sim):
             corner=(-self.detector.shape[0] // 2, -self.detector.shape[1] // 2),
         )
         logger.stop_spinner()
-        self.ROI_corners = self.select_ROI_corners(self.nROIs)
+        self.ROI_corners, self.ROI_center_coords, self.star_roi = select_ROI_corners(
+            self.ra,
+            self.dec,
+            self.nROIs,
+            source_cat=self.source_catalog,
+            locations=self.locations,
+            theta=self.roll,
+        )
 
         logger.start_spinner("Building ROI scene object...")
 

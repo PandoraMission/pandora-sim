@@ -13,6 +13,7 @@ from astropy.io import fits
 from astropy.time import Time
 from astroquery import log as asqlog
 from astroquery.ipac.nexsci.nasa_exoplanet_archive import NasaExoplanetArchive
+from scipy.spatial import KDTree
 
 asqlog.setLevel("ERROR")
 # Third-party
@@ -332,3 +333,59 @@ def save_to_FITS(
     hdul = fits.HDUList(hdu_list)
 
     hdul.writeto(filename, overwrite=overwrite)
+
+
+def calc_intensity_differences(coords, intensity_vals, radius):
+    """
+    Calculate the ratio of the value of each point in a given set of points to the sum of the values of
+    all points within a given radius.
+
+    Parameters
+    ----------
+    coords : list of np.ndarrays
+        Coordinate values of all the points to compare. List length is equal to the number of dimensions
+        the coordinates are given in, e.g. 2D coordinates will be contained within a list with length of 2.
+    intensity_vals : np.ndarray
+        Intensity values for each set of coordinates.
+    radius : float
+        Radius within which to compare the intensity of each point to that of the surrounding points.
+
+    Returns
+    -------
+    intensity_ratios : np.ndarray
+        Ratio of the value of a single point to the sum of the values of all points within a given radius
+        for each input coordinate set and intensity value.
+    """
+    # Convert the coordinates to a numpy array if they are not already
+    coords = np.array(coords)
+
+    # Ensure intensity_values is a numpy array and flatten it
+    intensity_values = np.array(intensity_vals)
+
+    # Build the KDTree
+    kd_tree = KDTree(coords)
+
+    # Initialize an array to store the differences
+    intensity_ratios = np.zeros_like(intensity_vals)
+
+    # Loop through each point in the coordinate set
+    for i, point in enumerate(coords):
+        # Find indices of points within the specified radius
+        indices = kd_tree.query_ball_point(point, radius)
+
+        # Sum the intensities of nearby points
+        intensity_sum = np.sum(intensity_values[indices])
+        # print(intensity_sum - intensity_values[i])
+        # print('intensity_values', intensity_values[i])
+        # print(intensity_values[indices])
+
+        # Calculate the difference for the current point
+        if (intensity_sum - intensity_vals[i]) == 0:
+            intensity_ratios[i] = 100.0  # set to an arbitrarily high number
+        else:
+            # intensity_differences[i] = (2 * intensity_values[i]) - intensity_sum
+            intensity_ratios[i] = intensity_vals[i] / (
+                intensity_sum - intensity_vals[i]
+            )
+
+    return intensity_ratios
