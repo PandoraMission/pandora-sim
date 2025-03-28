@@ -5,6 +5,7 @@ src/pandorasim/data/pandora_*_20210602.*
 src/pandorasim/data/flatfield*.fits
 docs/playtime.ipynb
 docs/*.fits
+snippets/calibrationtests
 
 # Mac things
 .DS_Store

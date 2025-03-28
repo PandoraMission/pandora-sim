@@ -1,4 +1,5 @@
 """Simulator for Visible Detector"""
+
 import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
@@ -27,6 +28,16 @@ class NIRSim(Sim):
         """
         super().__init__(detector=NIRDetector())
         self.psf = self.psf.freeze_dimension(row=0 * u.pixel, column=0 * u.pixel)
+        self.subarray_size = self.detector.subarray_size
+        self.dark = self.detector.dark
+        self.read_noise = self.detector.read_noise
+        self.bias = self.detector.bias
+        self.bias_uncertainty = self.detector.bias_uncertainty
+
+        self.dark = 0.1 * u.electron / u.second
+        self.read_noise = 8 * u.electron
+        self.bias = 5000 * u.electron
+        self.bias_uncertainty = 500 * u.electron
 
     @add_docstring("ra", "dec", "theta")
     def point(self, ra, dec, roll):
@@ -34,11 +45,23 @@ class NIRSim(Sim):
         Point the simulation in a direction.
         """
         super().point(ra=ra, dec=dec, roll=roll)
+        self._build_scene()
+
+    @add_docstring("source_catalog")
+    def from_source_catalog(self, source_catalog):
+        """
+        Use a source catalog to "point"
+        """
+        super().from_source_catalog(source_catalog=source_catalog)
+        self._get_spectra(source_catalog)
+        self._build_scene()
+
+    def _build_scene(self):
         logger.start_spinner("Building trace scene object...")
         self.tracescene = pp.TraceScene(
             self.locations,
             psf=self.psf,
-            shape=self.detector.subarray_size,
+            shape=self.subarray_size,
             corner=(0, 0),
             wav_bin=1,
         )
@@ -46,7 +69,10 @@ class NIRSim(Sim):
 
     def _get_source_catalog(self):
         source_catalog = super()._get_source_catalog(gbpmagnitude_range=(-6, 21))
+        source_catalog = self._get_spectra(source_catalog)
+        return source_catalog
 
+    def _get_spectra(self, source_catalog):
         logger.start_spinner("Interpolating PHOENIX spectra...")
         spectra = np.zeros((len(source_catalog), self.psf.trace_wavelength.shape[0]))
         for idx, teff, logg, j in zip(
@@ -189,13 +215,13 @@ class NIRSim(Sim):
             # Read Noise
             data += np.random.normal(
                 loc=0,
-                scale=self.detector.read_noise.value,
+                scale=self.read_noise.value,
                 size=data.shape,
             ).astype(int)
 
             # Add poisson noise for the dark current to every frame, units of electrons
             data += np.random.poisson(
-                lam=(self.detector.dark * integration_time.to(u.second)).value,
+                lam=(self.dark * integration_time.to(u.second)).value,
                 size=data.shape,
             ).astype(int)
 
@@ -204,8 +230,8 @@ class NIRSim(Sim):
 
         # Crap gain for now because gain calculations are wicked broken
         data = (data.astype(float) * 0.5).astype(int)
-        bias = self.detector.bias.value * 0.5
-        bias_std = self.detector.bias_uncertainty.value * 0.5
+        bias = self.bias.value * 0.5
+        bias_std = self.bias_uncertainty.value * 0.5
         # Any pixels greater than uint16 are maxed out (saturated)
         data[(data + bias) > 2**16] = 2**16
 
@@ -277,8 +303,9 @@ class NIRSim(Sim):
             SC_Integrations=1, jitter=False, noise=True, output_type="array"
         )[0, :, :, :]
         d = data.astype(int)[-1] - data.astype(int)[0]
-        vmin, vmax = kwargs.pop("vmin", np.percentile(d, 1)), kwargs.pop(
-            "vmax", -np.percentile(d, 1)
+        vmin, vmax = (
+            kwargs.pop("vmin", np.percentile(d, 1)),
+            kwargs.pop("vmax", -np.percentile(d, 1)),
         )
         cmap = kwargs.pop("cmap", "Greys")
         _, ax = plt.subplots(figsize=(3, 6))
@@ -331,7 +358,6 @@ class NIRSim(Sim):
         SC_Groups,
         SC_Integrations,
     ):
-
         integration_time = self.detector.frame_time()
 
         primary_kwds = self.primary_kwds

@@ -1,4 +1,5 @@
 """Simulator for Visible Detector"""
+
 from copy import deepcopy
 
 import astropy.units as u
@@ -9,6 +10,7 @@ from astropy.io import fits
 from astropy.table import Table
 from astropy.time import Time
 from pandorasat import PANDORASTYLE, VisibleDetector, get_logger
+import pandas as pd
 
 from . import __version__
 from .docstrings import add_docstring
@@ -22,11 +24,7 @@ logger = get_logger("pandora-sim")
 
 class VisibleSim(Sim):
     @add_docstring("ROI_size", "nROIs")
-    def __init__(
-        self,
-        ROI_size=(50, 50),
-        nROIs=9,
-    ):
+    def __init__(self, ROI_size=(50, 50), nROIs=9, ROI_corners=None):
         """
         Visible Simulator for Pandora.
         """
@@ -61,7 +59,7 @@ class VisibleSim(Sim):
         corners = [(-size[0] // 2 + crpix[0], -size[1] // 2 + crpix[1])]
         while len(corners) < nROIs:
             if len(locations) == 0:
-                raise ValueError(f"Can not select {nROIs} ROIs")
+                return corners
             idx = np.argmin(source_mag)
             corner = np.round(locations[idx]).astype(int) - size // 2
             if ~np.any(
@@ -84,17 +82,42 @@ class VisibleSim(Sim):
         Point the simulation in a direction.
         """
         super().point(ra=ra, dec=dec, roll=roll)
-        logger.start_spinner("Building scene object...")
+        self.ROI_corners = None
+        self._build_scene()
+
+    @add_docstring("source_catalog")
+    def from_source_catalog(self, source_catalog: pd.DataFrame):
+        """
+        Create a simulation based on a catalog
+        """
+        super().from_source_catalog(
+            source_catalog=self._calculate_counts(source_catalog)
+        )
+        r, c = self.source_catalog.row.values, self.source_catalog.column.values
+        s = np.argsort(np.hypot(r - 1024, c - 1024))
+        corners = np.vstack(
+            [
+                r[s][: self.nROIs] - self.ROI_size[0] // 2,
+                c[s][: self.nROIs] - self.ROI_size[1] // 2,
+            ]
+        ).T.astype(int)
+        self.ROI_corners = [tuple(corner) for corner in corners]
+        self._build_scene()
+
+    def _build_scene(self):
+        # logger.start_spinner("Building scene object...")
         self.scene = pp.Scene(
             self.locations - np.asarray(self.detector.shape) / 2,
             self.psf,
             self.detector.shape,
             corner=(-self.detector.shape[0] // 2, -self.detector.shape[1] // 2),
         )
-        logger.stop_spinner()
-        self.ROI_corners = self.select_ROI_corners(self.nROIs)
+        # logger.stop_spinner()
+        if self.ROI_corners is None:
+            self.ROI_corners = self.select_ROI_corners(self.nROIs)
+            self.nROIs = len(self.ROI_corners)
 
-        logger.start_spinner("Building ROI scene object...")
+        # logger.start_spinner("Building ROI scene object...")
 
         k = np.any(
             [
@@ -111,26 +134,37 @@ class VisibleSim(Sim):
             self.locations[k] - np.asarray(self.detector.shape) / 2,
             self.psf,
             self.detector.shape,
-            corner=(-self.detector.shape[0] // 2, -self.detector.shape[1] // 2),
+            corner=(
+                -np.asarray(self.detector.shape[0]) // 2,
+                -np.asarray(self.detector.shape[1]) // 2,
+            ),
             ROI_size=self.ROI_size,
-            ROI_corners=self.ROI_corners,
+            ROI_corners=[
+                (
+                    int(r[0] - self.detector.shape[0] // 2),
+                    int(r[1] - self.detector.shape[1] // 2),
+                )
+                for r in self.ROI_corners
+            ],
             nROIs=self.nROIs,
         )
-        logger.stop_spinner()
+        # logger.stop_spinner()
 
     def _get_source_catalog(self):
         source_catalog = super()._get_source_catalog(gbpmagnitude_range=(-6, 18))
+        return self._calculate_counts(source_catalog)
 
+    def _calculate_counts(self, source_catalog):
         # we're assuming that Gaia B mag is very close to the Pandora visible magnitude
         vis_counts = np.zeros(len(source_catalog))
         vis_flux = np.zeros(len(source_catalog))
-        wav = np.arange(100, 1000) * u.nm
-        s = np.trapz(self.detector.sensitivity(wav), wav)
+        # wav = np.arange(100, 1000) * u.nm
+        # s = np.trapz(self.detector.sensitivity(wav), wav)
         for idx, m in enumerate(np.asarray(source_catalog.mag)):
-            f = self.detector.flux_from_mag(m)
+            f = self.detector.mag_to_flux(m)
             vis_flux[idx] = f.value
             # counts in electron/u.second
-            vis_counts[idx] = (f * s).to(u.electron / u.second).value
+            vis_counts[idx] = (f).to(u.electron / u.second).value
 
         source_catalog["counts"] = vis_counts
         source_catalog["flux"] = vis_flux
@@ -195,7 +229,7 @@ class VisibleSim(Sim):
 
             # Add poisson noise for the dark current to every frame, units of electrons
             ffi += np.random.poisson(
-                lam=(self.detector.dark * int_time).value,
+                lam=(self.detector.dark_rate * int_time).value,
                 size=ffi.shape,
             ).astype(int)
 
@@ -318,7 +352,7 @@ class VisibleSim(Sim):
 
             # Add poisson noise for the dark current to every frame, units of electrons
             data += np.random.poisson(
-                lam=(self.detector.dark * integration_time.to(u.second)).value,
+                lam=(self.detector.dark_rate * integration_time.to(u.second)).value,
                 size=data.shape,
             ).astype(int)
 
@@ -347,7 +381,7 @@ class VisibleSim(Sim):
         d = self.observe(
             nreads=50, nframes=1, output_type="array", jitter=False, noise=True
         )[:, 0, :, :]
-        vmin, vmax = np.percentile(d, 1), np.percentile(d, 90)
+        vmin, vmax = np.percentile(d, 1), np.percentile(d, 99)
         # Find the next largest perfect square from the number of subarrays given
         next_square = int(np.ceil(np.sqrt(self.nROIs)) ** 2)
         n = int(np.sqrt(next_square))
@@ -381,6 +415,10 @@ class VisibleSim(Sim):
     def show_FFI(self, ax=None):
         """Plot an example of an FFI."""
         ffi = self.get_FFI(nreads=50)
+        d = self.observe(
+            nreads=50, nframes=1, output_type="array", jitter=False, noise=True
+        )[:, 0, :, :]
+        vmin, vmax = np.percentile(d, 1), np.percentile(d, 99)
 
         if ax is None:
             _, ax = plt.subplots(figsize=(7, 6))
@@ -388,8 +426,8 @@ class VisibleSim(Sim):
         with plt.style.context(PANDORASTYLE):
             im = ax.imshow(
                 ffi,
-                vmin=np.percentile(ffi, 10),
-                vmax=np.percentile(ffi, 99),
+                vmin=vmin,
+                vmax=vmax,
                 interpolation="nearest",
                 origin="lower",
                 cmap="Greys",
