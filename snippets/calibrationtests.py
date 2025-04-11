@@ -9,6 +9,7 @@ from astropy.table import Table
 from pandorasim.utils import get_jitter
 from astropy.coordinates import SkyCoord
 import astropy.units as u
+import matplotlib.animation as animation
 
 
 def get_jitter_test_cube_FFI(
@@ -16,13 +17,14 @@ def get_jitter_test_cube_FFI(
     nreads: int = 50,
     jitter_row: float = 1,
     jitter_col: float = 1,
-    noise=True,
     jitter=True,
     cosmic_ray_rate=1000 / (u.second * u.cm**2),
 ):
     """Get a fits file with reads of the visible channel FFIs with an expected amount of jitter."""
 
     c = SkyCoord.from_name(targetname)
+    c = ps.utils.get_sky_catalog(c.ra.deg, c.dec.deg, radius=0.015)["coords"][0]
+
     # Initialize a simulator object
     sim = psim.VisibleSim()
     # Point the simulator
@@ -49,60 +51,49 @@ def get_jitter_test_cube_FFI(
         delta_pos = None
     # FFI has shape (nrows, ncolumns), in units of electrons.
     ffis = sim.scene.model(source_flux, delta_pos)
-    # Apply poisson (shot) noise, ffi now has shape  (nrows, ncolumns), units of electrons
-    # if hasattr(sim.detector, "fieldstop"):
-    #     ffis *= sim.detector.fieldstop.astype(int)
+    k = ffis > 0
+    ffis[k] = np.random.poisson(ffis[k])
 
-    if noise:
-        # Apply background to every read, units of electrons
-        bkg = np.random.poisson(
-            (sim.background_rate * int_time).value, size=ffis.shape
-        ).astype(int)
-        # if hasattr(sim.detector, "fieldstop"):
-        #     bkg *= sim.detector.fieldstop.astype(int)
-        ffis += bkg
-
-        # # Apply a bias to every read which is a Gaussian with mean = bias * nreads value and std = (nreads * (read noise)**2)**0.5
-        # We actually do this as a sum because otherwise the integer math doesn't work out...!?
-
-        test_distribution = (
-            np.random.normal(
-                loc=sim.detector.bias.value,
-                scale=sim.detector.read_noise.value,
-                size=(nreads, 10000),
-            )
-            .astype(int)
-            .sum(axis=0)
-        )
-        ffis += np.random.normal(
-            loc=test_distribution.mean(),
-            scale=sim.detector.read_noise.value * np.sqrt(nreads),
-            size=(ffis.shape),
-        ).astype(int)
-
-        # Add poisson noise for the dark current to every frame, units of electrons
-        ffis += np.random.poisson(
-            lam=(sim.detector.dark_rate * int_time).value,
-            size=ffis.shape,
-        ).astype(int)
+    gain = 1 / 0.6
+    # Convert to DN, hand coded
+    ffis *= gain
 
     cosmic_ray_expectation = (
         cosmic_ray_rate
         * ((sim.detector.pixel_size * 2048 * u.pix) ** 2).to(u.cm**2)
         * sim.detector.integration_time
     ).value
+
+    cmrs = np.zeros_like(ffis)
     for idx in range(nreads):
-        ffis[idx] += psim.utils.get_simple_cosmic_ray_image(
+        cmr = psim.utils.get_simple_cosmic_ray_image(
             cosmic_ray_expectation=cosmic_ray_expectation
         ).value
+        k = cmr > 0
+        # Gain hand coded
+        cmrs[idx, k] += np.random.poisson(cmr[k]) * gain
 
-    # Apply gain
-    #        ffi = sim.detector.apply_gain(u.Quantity(ffi.ravel(), unit='electron')).value.reshape(ffi.shape)
-    # Crap gain for now because gain calculations are wicked broken
-    # ffi *= sim.detector.gain
+    # Apply background to every read, units of electrons
+    noise = np.random.poisson(
+        (sim.background_rate * int_time).value, size=ffis.shape
+    ).astype(int)
 
-    # This is a bit hacky, but for FFIs we'll be ok. We do this because working with individual reads for FFI data is slow.
-    ffis[ffis > (nreads * 2**16)] = nreads * 2**16
+    # Add poisson noise for the dark current to every frame, units of electrons
+    noise += np.random.poisson(
+        lam=(sim.detector.dark_rate * int_time).value,
+        size=ffis.shape,
+    ).astype(int)
+
+    # Apply a bias and read noise
+    noise += np.random.normal(
+        loc=0,
+        scale=sim.detector.read_noise.value,
+        size=(ffis.shape),
+    ).astype(int)
+
+    noise = np.asarray(np.asarray(noise, float) * gain, int)
+    noise += sim.detector.bias.value.astype(int)
+    ffis[ffis > (43000)] = 43000
 
     hdr = fits.Header()
     hdr["AUTHOR"] = "Christina Hedges"
@@ -126,6 +117,7 @@ def get_jitter_test_cube_FFI(
     hdr["JITTER_X"] = (jitter_col, "jitter stddev in x in arcseconds")
     hdr["JITTER_Y"] = (jitter_row, "jitter stddev in y in arcseconds")
     hdr["JITTER_R"] = (0.0005, "jitter stddev in theta")
+    hdr["SCI_UNIT"] = ("DN", "unit of science extension")
     hdu0 = fits.PrimaryHDU(header=hdr)
     cols = fits.ColDefs(
         [
@@ -145,7 +137,9 @@ def get_jitter_test_cube_FFI(
             hdu0,
             fits.BinTableHDU.from_columns(cols, name="META"),
             fits.BinTableHDU(Table.from_pandas(sim.source_catalog), name="sources"),
-            fits.CompImageHDU(data=np.int32(ffis), name="science"),
+            fits.CompImageHDU(data=np.int32(ffis + noise + cmrs), name="science"),
+            # fits.CompImageHDU(data=np.int32(ffis), name="photons"),
+            # fits.CompImageHDU(data=np.int32(cmrs), name="cosmics"),
         ]
     )
     return hdulist
@@ -174,10 +168,34 @@ def main():
         "TOI-244",
         "LTT 1445 A",
     ]
+
+    targets = [
+        "WASP-69",
+        "WASP-107",
+        "HIP 65 A",
+        "TOI-540",
+        "K2-141",
+        "K2-3",
+        "GJ 1132",
+        "GJ 3470",
+        "GJ 357",
+        "GJ 436",
+        "GJ 9827",
+        "HAT-P-11",
+        "HAT-P-19",
+        "HATS-72",
+        "HIP 65 A",
+        "L 98-59",
+        "LHS_3844",
+        "LTT 1445 A",
+        "TRAPPIST-1",
+    ]
+
     for target in targets:
-        for cmrate in np.arange(1, 4):
+        for cmrate in np.arange(2, 3):
             hdulist = get_jitter_test_cube_FFI(
-                targetname=target, cosmic_ray_rate=10**cmrate * 1 / (u.second * u.cm**2)
+                targetname=target,
+                cosmic_ray_rate=10**cmrate * 1 / (u.second * u.cm**2),
             )
             hdulist.writeto(
                 f"calibrationtests/jittercubes/{target.replace(' ', '_')}_cmrate{cmrate}_visible_sim_{Time.now().strftime('%d-%m-%Y')}.fits",

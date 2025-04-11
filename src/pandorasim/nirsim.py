@@ -29,15 +29,15 @@ class NIRSim(Sim):
         super().__init__(detector=NIRDetector())
         self.psf = self.psf.freeze_dimension(row=0 * u.pixel, column=0 * u.pixel)
         self.subarray_size = self.detector.subarray_size
-        self.dark = self.detector.dark
+        self.dark = self.detector.dark_rate
         self.read_noise = self.detector.read_noise
         self.bias = self.detector.bias
         self.bias_uncertainty = self.detector.bias_uncertainty
 
-        self.dark = 0.1 * u.electron / u.second
-        self.read_noise = 8 * u.electron
-        self.bias = 5000 * u.electron
-        self.bias_uncertainty = 500 * u.electron
+        # self.dark = 0.1 * u.electron / u.second
+        # self.read_noise = 8 * u.electron
+        # self.bias = 5000 * u.electron
+        # self.bias_uncertainty = 500 * u.electron
 
     @add_docstring("ra", "dec", "theta")
     def point(self, ra, dec, roll):
@@ -57,15 +57,15 @@ class NIRSim(Sim):
         self._build_scene()
 
     def _build_scene(self):
-        logger.start_spinner("Building trace scene object...")
+        # logger.start_spinner("Building trace scene object...")
         self.tracescene = pp.TraceScene(
             self.locations,
             psf=self.psf,
             shape=self.subarray_size,
             corner=(0, 0),
-            wav_bin=1,
+            # wav_bin=1,
         )
-        logger.stop_spinner()
+        # logger.stop_spinner()
 
     def _get_source_catalog(self):
         source_catalog = super()._get_source_catalog(gbpmagnitude_range=(-6, 21))
@@ -73,7 +73,7 @@ class NIRSim(Sim):
         return source_catalog
 
     def _get_spectra(self, source_catalog):
-        logger.start_spinner("Interpolating PHOENIX spectra...")
+        # logger.start_spinner("Interpolating PHOENIX spectra...")
         spectra = np.zeros((len(source_catalog), self.psf.trace_wavelength.shape[0]))
         for idx, teff, logg, j in zip(
             range(len(source_catalog)),
@@ -93,7 +93,7 @@ class NIRSim(Sim):
                 teff = 10000
             wav, spec = get_phoenix_model(teff=teff, logg=logg, jmag=j)
             spectra[idx, :] = self.psf.integrate_spectrum(wav, spec)
-        logger.stop_spinner()
+        # logger.stop_spinner()
 
         # Units of electrons/s
         self.spectra = spectra * u.electron / u.s

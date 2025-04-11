@@ -30,8 +30,8 @@ class Sim(ABC):
 
     @add_docstring("ra", "dec", "theta")
     @abstractmethod
-    def point(self, ra: u.Quantity, dec: u.Quantity, roll: u.Quantity):
-        self.ra, self.dec, self.roll = ra, dec, roll
+    def point(self, ra: u.Quantity, dec: u.Quantity, roll: u.Quantity, epoch="2000"):
+        self.ra, self.dec, self.roll, self.epoch = ra, dec, roll, epoch
         self.wcs = self.detector.get_wcs(self.ra, self.dec, theta=self.roll)
 
         # logger.start_spinner("Finding nearby sources...")
@@ -152,7 +152,7 @@ class Sim(ABC):
 
         # Get location and magnitude data
         cat = ps.utils.get_sky_catalog(
-            self.ra, self.dec, radius=radius * u.deg, **kwargs
+            self.ra, self.dec, radius=radius * u.deg, epoch=self.epoch, **kwargs
         )
         ra, dec, mag = cat["coords"].ra.deg, cat["coords"].dec.deg, cat["bmag"]
         pix_coords = self.world_to_pixel(ra, dec, distortion=distortion)
