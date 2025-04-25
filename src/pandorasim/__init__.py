@@ -1,6 +1,16 @@
-__version__ = "1.0.10"
 # Standard library
 import os  # noqa
+from importlib.metadata import PackageNotFoundError, version  # noqa
+
+
+def get_version():
+    try:
+        return version("pandorasim")
+    except PackageNotFoundError:
+        return "unknown"
+
+
+__version__ = get_version()
 
 PACKAGEDIR = os.path.abspath(os.path.dirname(__file__))
 TESTDIR = "/".join(PACKAGEDIR.split("/")[:-2]) + "/tests/"

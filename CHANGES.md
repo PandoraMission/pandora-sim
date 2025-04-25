@@ -1,3 +1,12 @@
+# 1.1.1
+
+- Fixed bug identified by @yoavrotman in #21
+
+# 1.1.0
+
+- Fixed bugs down stream in pandora-psf and pandora-sat
+- Updated with pandora-blank changes
+
 # 1.0.0
 
 - Switched PSF and trace functions to PandoraPSF

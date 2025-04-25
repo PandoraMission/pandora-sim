@@ -16,12 +16,12 @@ shape = (256 + 1, 256 + 1)
 
 Xpix, Ypix = np.meshgrid(np.linspace(0, 2048, shape[1]), np.linspace(0, 2048, shape[0]))
 Xpix, Ypix = Xpix.ravel(), Ypix.ravel()
-Yfoc, Xfoc = wcs.sip.pix2foc(np.vstack([Ypix, Xpix]).T, 0).T
+Yfoc, Xfoc = wcs.sip.pix2foc(np.vstack([Ypix, Xpix]).T + 0.5, 0).T
 c, r = psf.psf_column.value, psf.psf_row.value
 C, R = np.meshgrid(c, r)
 y0, x0 = np.zeros((2, np.prod(shape)))
 for idx in tqdm(range(np.prod(shape))):
-    ar = psf.psf(row=Xpix[idx], column=Ypix[idx])
+    ar = psf.psf(row=Xpix[idx] - 1023.5, column=Ypix[idx] - 1023.5)
     x0[idx], y0[idx] = np.average(C, weights=ar), np.average(R, weights=ar)
 y0, x0 = y0.reshape(shape), x0.reshape(shape)
 Ypix, Xpix = Ypix.reshape(shape), Xpix.reshape(shape)

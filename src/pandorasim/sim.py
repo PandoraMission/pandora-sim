@@ -10,7 +10,6 @@ import pandorapsf as pp
 import pandorasat as ps
 
 from .docstrings import add_docstring
-from . import logger
 
 __all__ = ["Sim"]
 
@@ -45,13 +44,17 @@ class Sim(ABC):
     @abstractmethod
     def from_source_catalog(self, source_catalog: pd.DataFrame):
         self.ra, self.dec, self.roll = 0 * u.deg, 0 * u.deg, 0 * u.deg
-        self.wcs = self.detector.get_wcs(0 * u.deg, 0 * u.deg, theta=0 * u.deg)
+        self.wcs = self.detector.get_wcs(
+            0 * u.deg,
+            0 * u.deg,
+            theta=0 * u.deg,
+        )
         self.source_catalog = source_catalog
         self.locations = np.asarray(
             [self.source_catalog.row, self.source_catalog.column]
         ).T
 
-    def world_to_pixel(self, ra, dec, distortion=True):
+    def world_to_pixel(self, ra, dec, type="python", distortion=True):
         """Helper function. This function ensures we keep the row-major convention in pandora-sim.
 
         Parameters:
@@ -60,28 +63,50 @@ class Sim(ABC):
             Right Ascension to be converted to pixel position.
         dec : float
             Declination to be converted to pixel position.
+        type: string
+            What type of indexing to use.
+            If using `"python`' this will return the sub pixel position in 0 based indexing
+            If using `"wcs"` this will return the sub pixel position in 1 based indexing
         distortion : bool
             Flag whether to account for the distortion in the WCS when converting from RA/Dec
             to pixel position. Default is True.
 
         Returns
         -------
-        np.ndarray
-            Row and column positions of each provided RA and Dec.
+        row: np.ndarray
+            Row positions of each provided RA and Dec.
+        column: np.ndarray
+            Column positions of each provided RA and Dec.
         """
+        ndim = np.ndim(ra)
         coords = np.vstack(
             [
                 ra.to(u.deg).value if isinstance(ra, u.Quantity) else ra,
                 dec.to(u.deg).value if isinstance(dec, u.Quantity) else dec,
             ]
         ).T
-        if distortion:
-            column, row = self.wcs.all_world2pix(coords, 0).T
+        if type.lower() == "wcs":
+            origin = 1
+        elif type.lower() == "python":
+            origin = 0
         else:
-            column, row = self.wcs.wcs_world2pix(coords, 0).T
-        return np.vstack([row, column])
+            raise ValueError(f"Can not parse type `{type}`.")
+        if distortion:
+            column, row = self.wcs.all_world2pix(coords, origin).T
+        else:
+            column, row = self.wcs.wcs_world2pix(coords, origin).T
+        if type.lower() == "python":
+            #  Add in half pixel offset to move to the center of the pixel
+            row += 0.5
+            column += 0.5
+        if ndim == 0:
+            if np.ndim(row) == 1:
+                return np.asarray([row[0], column[0]]) * u.pixel
+            else:
+                return np.asarray([row, column]) * u.pixel
+        return np.vstack([row, column]) * u.pixel
 
-    def pixel_to_world(self, row, column, distortion=True):
+    def pixel_to_world(self, row, column, type="python", distortion=True):
         """Helper function. This function ensures we keep the row-major convention in pandora-sim.
 
         Parameters:
@@ -96,19 +121,35 @@ class Sim(ABC):
 
         Returns
         -------
-        np.ndarray
-            RA and Dec of input pixel positions.
+        ra: np.ndarray
+            RA of input pixel positions.
+        dec: np.ndarray
+            Dec of input pixel positions.
         """
+        ndim = np.ndim(row)
         coords = np.vstack(
             [
                 column.to(u.pixel).value if isinstance(column, u.Quantity) else column,
                 row.to(u.pixel).value if isinstance(row, u.Quantity) else row,
             ]
         ).T
-        if distortion:
-            return self.wcs.all_pix2world(coords, 0).T * u.deg
+        if type.lower() == "wcs":
+            origin = 1
+        elif type.lower() == "python":
+            coords -= 0.5
+            origin = 0
         else:
-            return self.wcs.wcs_pix2world(coords, 0).T * u.deg
+            raise ValueError(f"Can not parse type `{type}`.")
+        if distortion:
+            ra, dec = self.wcs.all_pix2world(coords, origin).T
+        else:
+            ra, dec = self.wcs.wcs_pix2world(coords, origin).T
+        if ndim == 0:
+            if np.ndim(ra) == 1:
+                return np.asarray([ra[0], dec[0]]) * u.deg
+            else:
+                return np.asarray([ra, dec]) * u.deg
+        return np.vstack([ra, dec]) * u.deg
 
     def _get_source_catalog(self, distortion: bool = True, **kwargs) -> pd.DataFrame:
         """Gets the source catalog of an input target
@@ -155,7 +196,9 @@ class Sim(ABC):
             self.ra, self.dec, radius=radius * u.deg, epoch=self.epoch, **kwargs
         )
         ra, dec, mag = cat["coords"].ra.deg, cat["coords"].dec.deg, cat["bmag"]
-        pix_coords = self.world_to_pixel(ra, dec, distortion=distortion)
+        pix_coords = self.world_to_pixel(
+            ra, dec, type="python", distortion=distortion
+        ).value
 
         k = (
             np.abs(pix_coords[0] - shape[0] / 2)
@@ -224,7 +267,8 @@ class Sim(ABC):
 
         This function has no basis in physics at all.
         The true rate of cosmic rays, the energy deposited, sampling distributions.
-        All this function can do is put down fairly reasonable "tracks" that mimic the impact of cosmic rays, with some tuneable parameters to change the properties.
+        All this function can do is put down fairly reasonable "tracks" that mimic the
+        impact of cosmic rays, with some tuneable parameters to change the properties.
 
         """
         cosmic_ray_expectation = (

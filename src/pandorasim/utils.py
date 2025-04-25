@@ -30,7 +30,8 @@ def get_simple_cosmic_ray_image(
 
     This function has no basis in physics at all.
     The true rate of cosmic rays, the energy deposited, sampling distributions.
-    All this function can do is put down fairly reasonable "tracks" that mimic the impact of cosmic rays, with some tuneable parameters to change the properties.
+    All this function can do is put down fairly reasonable "tracks" that mimic the
+    impact of cosmic rays, with some tuneable parameters to change the properties.
 
     """
     ncosmics = np.random.poisson(cosmic_ray_expectation)

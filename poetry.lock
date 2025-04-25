@@ -1595,13 +1595,14 @@ xml = ["lxml (>=4.9.2)"]
 
 [[package]]
 name = "pandorapsf"
-version = "0.5.1"
+version = "0.6.1"
 description = ""
 optional = false
 python-versions = "<3.13,>=3.9"
 groups = ["main"]
 files = [
-    {file = "pandorapsf-0.5.1-py3-none-any.whl", hash = "sha256:043d6a5102fad59cb25d88a138fefd3b2904824a558dc140c5aaf7faa97a3d43"},
+    {file = "pandorapsf-0.6.1-py3-none-any.whl", hash = "sha256:5734b91f6299c2e9bbf8886f48c1c49366dbbb8ab7dbfc708832ccba6da1ba9f"},
+    {file = "pandorapsf-0.6.1.tar.gz", hash = "sha256:78abbfd935ee853d1d5eba3dc374901456c482dac00026199d8190b66173f801"},
 ]
 
 [package.dependencies]
@@ -1612,14 +1613,14 @@ sparse3d = ">=1.0.3"
 
 [[package]]
 name = "pandorasat"
-version = "0.8.5"
+version = "0.9.2"
 description = ""
 optional = false
 python-versions = "<3.13,>=3.9"
 groups = ["main"]
 files = [
-    {file = "pandorasat-0.8.5-py3-none-any.whl", hash = "sha256:653bc03cbe5782d8691fc634b9913734cb4e5e46c89f6405f2cb5fa369652736"},
-    {file = "pandorasat-0.8.5.tar.gz", hash = "sha256:b7b86d6ea66c6a91ed8f8b567802e642c3c4af13d0cc47d37da82b458e57fc30"},
+    {file = "pandorasat-0.9.2-py3-none-any.whl", hash = "sha256:74b7a0187e1ba1425a47ab5588cc50699f99ea34c827c943c03e416c6b5a26e8"},
+    {file = "pandorasat-0.9.2.tar.gz", hash = "sha256:a435630b206ed37ba0a4aabafe17d2cb78dafd0525522ff3d392eee6af5d4c7f"},
 ]
 
 [package.dependencies]
@@ -2309,4 +2310,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<3.13"
-content-hash = "13724f6d27b4f794671ee2672f5ee7656fc8f06bef2c4063ad6fdfe9e351303f"
+content-hash = "4848dc6f1afd628c03be3a4b5b35e05f6cda31955f2ef92b133b7b227c4dfc74"

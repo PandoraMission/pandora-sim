@@ -20,19 +20,24 @@ logger = get_logger("pandora-sim")
 
 
 class NIRSim(Sim):
-    def __init__(
-        self,
-    ):
+    def __init__(self):
         """
         NIR Simulator for Pandora.
         """
         super().__init__(detector=NIRDetector())
-        self.psf = self.psf.freeze_dimension(row=0 * u.pixel, column=0 * u.pixel)
+        if "row" in self.psf.dimension_names:
+            self.psf = self.psf.freeze_dimension(row=0 * u.pixel)
+        if "column" in self.psf.dimension_names:
+            self.psf = self.psf.freeze_dimension(column=0 * u.pixel)
         self.subarray_size = self.detector.subarray_size
         self.dark = self.detector.dark_rate
         self.read_noise = self.detector.read_noise
         self.bias = self.detector.bias
         self.bias_uncertainty = self.detector.bias_uncertainty
+        k = self.psf.trace_sensitivity.value > (
+            self.psf.trace_sensitivity.max().value * 1e-6
+        )
+        self.wavelength = self.psf.trace_wavelength[k]
 
         # self.dark = 0.1 * u.electron / u.second
         # self.read_noise = 8 * u.electron
@@ -63,6 +68,7 @@ class NIRSim(Sim):
             psf=self.psf,
             shape=self.subarray_size,
             corner=(0, 0),
+            wavelength=self.wavelength,
             # wav_bin=1,
         )
         # logger.stop_spinner()
@@ -74,7 +80,7 @@ class NIRSim(Sim):
 
     def _get_spectra(self, source_catalog):
         # logger.start_spinner("Interpolating PHOENIX spectra...")
-        spectra = np.zeros((len(source_catalog), self.psf.trace_wavelength.shape[0]))
+        spectra = np.zeros((len(source_catalog), self.wavelength.shape[0]))
         for idx, teff, logg, j in zip(
             range(len(source_catalog)),
             np.nan_to_num(np.asarray(source_catalog.teff), 5777),
@@ -92,7 +98,7 @@ class NIRSim(Sim):
                 )
                 teff = 10000
             wav, spec = get_phoenix_model(teff=teff, logg=logg, jmag=j)
-            spectra[idx, :] = self.psf.integrate_spectrum(wav, spec)
+            spectra[idx, :] = self.psf.integrate_spectrum(wav, spec, self.wavelength)
         # logger.stop_spinner()
 
         # Units of electrons/s
@@ -199,12 +205,14 @@ class NIRSim(Sim):
             source_flux[0, :, :] *= target_spectrum_function(time)
 
         # Data has shape (ntargets, nwavelength, ntimes), units of electrons
-        data = self.tracescene.model(source_flux, delta_pos)
-        data[data < 0] = 0
+        ar = self.tracescene.model(source_flux, delta_pos)
+        if not hasattr(ar, "unit"):
+            ar *= u.electron
 
         if noise:
             # Apply poisson (shot) noise, data now has shape  (ntargets, nwavelength, ntimes), units of electrons
-            data = np.random.poisson(data)
+            data = ar.value
+            data[data > 0] = np.random.poisson(data[data > 0])
 
             # Apply background to every read, units of electrons
             data += np.random.poisson(
@@ -224,7 +232,9 @@ class NIRSim(Sim):
                 lam=(self.dark * integration_time.to(u.second)).value,
                 size=data.shape,
             ).astype(int)
-
+            data *= ar.unit
+        else:
+            data = ar
         # Data in units of DN
         #    data = self.detector.apply_gain(u.Quantity(data.ravel(), unit='electron')).value.reshape(data.shape)
 
@@ -233,7 +243,7 @@ class NIRSim(Sim):
         bias = self.bias.value * 0.5
         bias_std = self.bias_uncertainty.value * 0.5
         # Any pixels greater than uint16 are maxed out (saturated)
-        data[(data + bias) > 2**16] = 2**16
+        data[(data.value + bias) > 2**16] = 2**16 * data.unit
 
         # Splits data into arrays representing each integration
         data_by_integration = np.array_split(
@@ -262,7 +272,7 @@ class NIRSim(Sim):
         result = []
         for cdx, d, info in zip(range(cadences), data_by_integration, integration_info):
             # Cumulative sum for reading up the ramp
-            d = np.cumsum(d, axis=0).astype(np.uint16)
+            d = np.cumsum(d.value, axis=0).astype(np.uint16)
             if noise:
                 d += np.random.normal(loc=bias, scale=bias_std, size=d.shape).astype(
                     np.uint16
@@ -278,7 +288,7 @@ class NIRSim(Sim):
                 )
             )
 
-        result = np.asarray(result, dtype=np.uint32)
+        result = np.asarray(result, dtype=np.uint32) * data.unit
         if output_type == "array":
             return result
         if output_type == "fits":
@@ -301,7 +311,7 @@ class NIRSim(Sim):
         """Plot an example subarray observation."""
         data = self.observe(
             SC_Integrations=1, jitter=False, noise=True, output_type="array"
-        )[0, :, :, :]
+        )[0, :, :, :].value
         d = data.astype(int)[-1] - data.astype(int)[0]
         vmin, vmax = (
             kwargs.pop("vmin", np.percentile(d, 1)),

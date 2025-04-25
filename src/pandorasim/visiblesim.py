@@ -5,12 +5,12 @@ from copy import deepcopy
 import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import pandorapsf as pp
 from astropy.io import fits
 from astropy.table import Table
 from astropy.time import Time
 from pandorasat import PANDORASTYLE, VisibleDetector, get_logger
-import pandas as pd
 
 from . import __version__
 from .docstrings import add_docstring
@@ -93,8 +93,10 @@ class VisibleSim(Sim):
         super().from_source_catalog(
             source_catalog=self._calculate_counts(source_catalog)
         )
-        r, c = self.source_catalog.row.values, self.source_catalog.column.values
-        s = np.argsort(np.hypot(r - 1024, c - 1024))
+        r, c = self.source_catalog.row.values - 1, self.source_catalog.column.values - 1
+        s = np.argsort(
+            np.hypot(r - self.detector.shape[0] // 2, c - self.detector.shape[1] // 2)
+        )
         corners = np.vstack(
             [
                 r[s][: self.nROIs] - self.ROI_size[0] // 2,
@@ -107,7 +109,7 @@ class VisibleSim(Sim):
     def _build_scene(self):
         # logger.start_spinner("Building scene object...")
         self.scene = pp.Scene(
-            self.locations - np.asarray(self.detector.shape) / 2,
+            self.locations - np.asarray(self.detector.shape) // 2,
             self.psf,
             self.detector.shape,
             corner=(-self.detector.shape[0] // 2, -self.detector.shape[1] // 2),

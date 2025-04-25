@@ -5,6 +5,10 @@ nav:
       - NIRSim: nirsim.md
       - VisibleSim: visiblesim.md
       - Base Class `Sim`: sim.md
+    - Explainers:
+      - Conventions: conventions.md
+      - WCS: wcs-explainer.md
+
       
 theme:
   name: "material"
