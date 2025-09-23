@@ -1,8 +1,10 @@
 """Abstract base class for a Simulator object"""
 
+# Standard library
 from abc import ABC, abstractmethod
 from copy import deepcopy
 
+# Third-party
 import astropy.units as u
 import numpy as np
 import pandas as pd
@@ -29,7 +31,9 @@ class Sim(ABC):
 
     @add_docstring("ra", "dec", "theta")
     @abstractmethod
-    def point(self, ra: u.Quantity, dec: u.Quantity, roll: u.Quantity, epoch="2000"):
+    def point(
+        self, ra: u.Quantity, dec: u.Quantity, roll: u.Quantity, epoch="2000"
+    ):
         self.ra, self.dec, self.roll, self.epoch = ra, dec, roll, epoch
         self.wcs = self.detector.get_wcs(self.ra, self.dec, theta=self.roll)
 
@@ -129,7 +133,11 @@ class Sim(ABC):
         ndim = np.ndim(row)
         coords = np.vstack(
             [
-                column.to(u.pixel).value if isinstance(column, u.Quantity) else column,
+                (
+                    column.to(u.pixel).value
+                    if isinstance(column, u.Quantity)
+                    else column
+                ),
                 row.to(u.pixel).value if isinstance(row, u.Quantity) else row,
             ]
         ).T
@@ -151,7 +159,9 @@ class Sim(ABC):
                 return np.asarray([ra, dec]) * u.deg
         return np.vstack([ra, dec]) * u.deg
 
-    def _get_source_catalog(self, distortion: bool = True, **kwargs) -> pd.DataFrame:
+    def _get_source_catalog(
+        self, distortion: bool = True, **kwargs
+    ) -> pd.DataFrame:
         """Gets the source catalog of an input target
 
         Parameters
@@ -176,7 +186,9 @@ class Sim(ABC):
         else:
             shape = self.detector.shape
         radius = np.hypot(*np.asarray(shape) // 2)
-        radius = ((radius * u.pixel) * self.detector.pixel_scale).to(u.deg).value
+        radius = (
+            ((radius * u.pixel) * self.detector.pixel_scale).to(u.deg).value
+        )
 
         # If there is a fieldstop, we can stop finding sources at that radius
         # if hasattr(self.detector, "fieldstop_radius"):
@@ -193,18 +205,24 @@ class Sim(ABC):
 
         # Get location and magnitude data
         cat = ps.utils.get_sky_catalog(
-            self.ra, self.dec, radius=radius * u.deg, epoch=self.epoch, **kwargs
+            self.ra,
+            self.dec,
+            radius=radius * u.deg,
+            epoch=self.epoch,
+            **kwargs,
         )
+        # import pdb
+        # pdb.set_trace()
         ra, dec, mag = cat["coords"].ra.deg, cat["coords"].dec.deg, cat["bmag"]
         pix_coords = self.world_to_pixel(
             ra, dec, type="python", distortion=distortion
         ).value
 
         k = (
-            np.abs(pix_coords[0] - shape[0] / 2)
+            np.abs(pix_coords[0] - shape[0] / 2 - self.detector.naxis2.value/2)
             < (shape[0] / 2 + self.psf_shape[0] / 2)
         ) & (
-            np.abs(pix_coords[1] - shape[1] / 2)
+            np.abs(pix_coords[1] - shape[1] / 2 - self.detector.naxis1.value/2)
             < (shape[1] / 2 + self.psf_shape[1] / 2)
         )
 
@@ -252,7 +270,7 @@ class Sim(ABC):
 
     @property
     def psf_shape(self):
-        p = self.detector.trace_pixel.value
+        p = self.psf.trace_pixel.value
         p = p.max() - p.min()
         return (p + 6, 6)
 
@@ -260,7 +278,9 @@ class Sim(ABC):
         self,
         cosmic_ray_rate=1000 / (u.second * u.cm**2),
         average_cosmic_ray_flux: u.Quantity = u.Quantity(1e3, unit="DN"),
-        cosmic_ray_distance: u.Quantity = u.Quantity(0.01, unit=u.pixel / u.DN),
+        cosmic_ray_distance: u.Quantity = u.Quantity(
+            0.01, unit=u.pixel / u.DN
+        ),
         image_shape=(2048, 2048),
     ):
         """Function to get a simple cosmic ray image
@@ -307,7 +327,9 @@ class Sim(ABC):
             m = (y2 - y1) / (x2 - x1)
             c = y1 - (m * x1)
 
-            xs, ys = np.sort([x1, x2]).astype(int), np.sort([y1, y2]).astype(int)
+            xs, ys = np.sort([x1, x2]).astype(int), np.sort([y1, y2]).astype(
+                int
+            )
             xs, ys = (
                 [xs[0], xs[1] if np.diff(xs) > 0 else xs[1] + 1],
                 [

@@ -1,5 +1,6 @@
 """Simulator for Visible Detector"""
 
+# Third-party
 import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
@@ -30,8 +31,8 @@ class NIRSim(Sim):
         if "column" in self.psf.dimension_names:
             self.psf = self.psf.freeze_dimension(column=0 * u.pixel)
         self.subarray_size = self.detector.subarray_size
-        self.dark = self.detector.dark_rate
-        self.read_noise = self.detector.read_noise
+        self.dark = self.detector.dark
+        self.read_noise = self.detector.readnoise
         self.bias = self.detector.bias
         self.bias_uncertainty = self.detector.bias_uncertainty
         k = self.psf.trace_sensitivity.value > (
@@ -74,7 +75,9 @@ class NIRSim(Sim):
         # logger.stop_spinner()
 
     def _get_source_catalog(self):
-        source_catalog = super()._get_source_catalog(gbpmagnitude_range=(-6, 21))
+        source_catalog = super()._get_source_catalog(
+            gbpmagnitude_range=(-6, 21)
+        )
         source_catalog = self._get_spectra(source_catalog)
         return source_catalog
 
@@ -98,7 +101,9 @@ class NIRSim(Sim):
                 )
                 teff = 10000
             wav, spec = get_phoenix_model(teff=teff, logg=logg, jmag=j)
-            spectra[idx, :] = self.psf.integrate_spectrum(wav, spec, self.wavelength)
+            spectra[idx, :] = self.psf.integrate_spectrum(
+                wav, spec, self.wavelength
+            )
         # logger.stop_spinner()
 
         # Units of electrons/s
@@ -166,7 +171,11 @@ class NIRSim(Sim):
         cadences = np.sum(
             [
                 np.sum(
-                    [(i == FRAME_BIT_DICT["read"]).all() for i in inte if len(i) > 0]
+                    [
+                        (i == FRAME_BIT_DICT["read"]).all()
+                        for i in inte
+                        if len(i) > 0
+                    ]
                 )
                 for inte in integration_info
             ]
@@ -240,14 +249,15 @@ class NIRSim(Sim):
 
         # Crap gain for now because gain calculations are wicked broken
         data = (data.astype(float) * 0.5).astype(int)
-        bias = self.bias.value * 0.5
+        bias = np.mean(self.bias.value * 0.5)   # Note: May want to change this to be multi-dimensional in the future
         bias_std = self.bias_uncertainty.value * 0.5
         # Any pixels greater than uint16 are maxed out (saturated)
         data[(data.value + bias) > 2**16] = 2**16 * data.unit
 
         # Splits data into arrays representing each integration
         data_by_integration = np.array_split(
-            data, np.cumsum(np.asarray([i.shape for i in integration_arrays])[:, 0])
+            data,
+            np.cumsum(np.asarray([i.shape for i in integration_arrays])[:, 0]),
         )[:-1]
 
         def get_group_masks(integration_info):
@@ -259,9 +269,11 @@ class NIRSim(Sim):
                         (
                             np.hstack(
                                 [
-                                    np.zeros(len(i), bool)
-                                    if idx != jdx
-                                    else np.ones(len(i), bool)
+                                    (
+                                        np.zeros(len(i), bool)
+                                        if idx != jdx
+                                        else np.ones(len(i), bool)
+                                    )
                                     for jdx, i in enumerate(integration_info)
                                 ]
                             )
@@ -270,20 +282,25 @@ class NIRSim(Sim):
             return np.asarray(masks)
 
         result = []
-        for cdx, d, info in zip(range(cadences), data_by_integration, integration_info):
+        for cdx, d, info in zip(
+            range(cadences), data_by_integration, integration_info
+        ):
             # Cumulative sum for reading up the ramp
             d = np.cumsum(d.value, axis=0).astype(np.uint16)
             if noise:
-                d += np.random.normal(loc=bias, scale=bias_std, size=d.shape).astype(
-                    np.uint16
-                )
+                d += np.random.normal(
+                    loc=bias, scale=bias_std, size=d.shape
+                ).astype(np.uint16)
 
             # Masks for each group
             group_masks = get_group_masks(info)
             # Output is the average in each group across the time dimension, after being cast in uint32 arrays.
             result.append(
                 np.asarray(
-                    [d[mask].astype(np.uint32).mean(axis=0) for mask in group_masks],
+                    [
+                        d[mask].astype(np.uint32).mean(axis=0)
+                        for mask in group_masks
+                    ],
                     dtype=np.uint32,
                 )
             )
@@ -405,7 +422,9 @@ class NIRSim(Sim):
         )
 
         corstime = int(
-            np.floor((start_time - Time("2000-01-01T12:00:00", scale="utc")).sec)
+            np.floor(
+                (start_time - Time("2000-01-01T12:00:00", scale="utc")).sec
+            )
         )
         finetime = int(corstime % 1 * 10**9 // 1)
 
@@ -421,7 +440,10 @@ class NIRSim(Sim):
             corstime,
             "seconds since the TAI Epoch (12PM Jan 1, 2000)",
         )
-        primary_kwds["FINETIME"] = (finetime, "nanoseconds added to CORSTIME seconds")
+        primary_kwds["FINETIME"] = (
+            finetime,
+            "nanoseconds added to CORSTIME seconds",
+        )
         primary_hdu = fits.PrimaryHDU()
         for key, value in primary_kwds.items():
             primary_hdu.header[key] = value

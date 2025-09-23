@@ -7,5 +7,40 @@ authors = ["Christina Hedges <christina.l.hedges@nasa.gov>"]
 [tool.poetry.dependencies]
 pyarrow = "<17.0.0"
 python = ">=3.9,<3.13"
-pandorasat = ">=0.9.2"
-pandorapsf = ">=0.6.1"
+pandorasat = ">=0.12.2"
+pandorapsf = ">=0.7.0"
+
+[tool.poetry.group.dev]
+optional = true
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.4"
+black = "^25.1.0"
+isort = "^6.0.0"
+flake8 = "^7.1.2"
+jupyterlab = "^4.3.5"
+mkdocs = "^1.6.1"
+mkdocs-jupyter = "^0.25.1"
+mkdocs-material = "^9.6.5"
+pytkdocs = {version = "^0.16.2", extras = ["numpy-style"]}
+mkdocs-include-markdown-plugin = "^7.1.4"
+mkdocstrings = {version = "^0.28.2", extras = ["python"]}
+jupyter-contrib-nbextensions = "^0.7.0"
+notebook = ">=6.0.0,<7.0.0"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 79
+
+[tool.isort]
+import_heading_firstparty = 'First-party/Local'
+import_heading_future = 'Future'
+import_heading_stdlib = 'Standard library'
+import_heading_thirdparty = 'Third-party'
+line_length = 79
+multi_line_output = 3
+no_lines_before = 'LOCALFOLDER'
+profile = 'black'

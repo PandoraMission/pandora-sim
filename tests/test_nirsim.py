@@ -1,8 +1,10 @@
+# Third-party
 import astropy.units as u
 import matplotlib.pyplot as plt
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
 
+# First-party/Local
 from pandorasim import TESTDIR, NIRSim
 
 
@@ -11,7 +13,9 @@ def test_visible():
     self = NIRSim()
     self.point(ra=c.ra, dec=c.dec, roll=-40 * u.deg)
     _ = self.show_subarray()
-    plt.savefig(TESTDIR + "output/test_subarray.png", dpi=150, bbox_inches="tight")
+    plt.savefig(
+        TESTDIR + "output/test_subarray.png", dpi=150, bbox_inches="tight"
+    )
     plt.close("all")
 
     hdulist = self.observe()

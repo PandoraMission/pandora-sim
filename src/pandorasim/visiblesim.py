@@ -1,7 +1,9 @@
 """Simulator for Visible Detector"""
 
+# Standard library
 from copy import deepcopy
 
+# Third-party
 import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
@@ -93,9 +95,15 @@ class VisibleSim(Sim):
         super().from_source_catalog(
             source_catalog=self._calculate_counts(source_catalog)
         )
-        r, c = self.source_catalog.row.values - 1, self.source_catalog.column.values - 1
+        r, c = (
+            self.source_catalog.row.values - 1,
+            self.source_catalog.column.values - 1,
+        )
         s = np.argsort(
-            np.hypot(r - self.detector.shape[0] // 2, c - self.detector.shape[1] // 2)
+            np.hypot(
+                r - self.detector.shape[0] // 2,
+                c - self.detector.shape[1] // 2,
+            )
         )
         corners = np.vstack(
             [
@@ -112,7 +120,10 @@ class VisibleSim(Sim):
             self.locations - np.asarray(self.detector.shape) // 2,
             self.psf,
             self.detector.shape,
-            corner=(-self.detector.shape[0] // 2, -self.detector.shape[1] // 2),
+            corner=(
+                -self.detector.shape[0] // 2,
+                -self.detector.shape[1] // 2,
+            ),
         )
         # logger.stop_spinner()
         if self.ROI_corners is None:
@@ -153,7 +164,9 @@ class VisibleSim(Sim):
         # logger.stop_spinner()
 
     def _get_source_catalog(self):
-        source_catalog = super()._get_source_catalog(gbpmagnitude_range=(-6, 18))
+        source_catalog = super()._get_source_catalog(
+            gbpmagnitude_range=(-6, 18)
+        )
         return self._calculate_counts(source_catalog)
 
     def _calculate_counts(self, source_catalog):
@@ -191,7 +204,8 @@ class VisibleSim(Sim):
         """
         int_time = self.detector.integration_time * nreads
         source_flux = (
-            (np.asarray(self.source_catalog.counts) * u.electron / u.second) * int_time
+            (np.asarray(self.source_catalog.counts) * u.electron / u.second)
+            * int_time
         ).value.astype(int)
 
         # FFI has shape (nrows, ncolumns), in units of electrons.
@@ -216,8 +230,8 @@ class VisibleSim(Sim):
 
             test_distribution = (
                 np.random.normal(
-                    loc=self.detector.bias.value,
-                    scale=self.detector.read_noise.value,
+                    loc=np.mean(self.detector.bias.value),
+                    scale=self.detector.readnoise.value,
                     size=(nreads, 10000),
                 )
                 .astype(int)
@@ -225,13 +239,13 @@ class VisibleSim(Sim):
             )
             ffi += np.random.normal(
                 loc=test_distribution.mean(),
-                scale=self.detector.read_noise.value * np.sqrt(nreads),
+                scale=self.detector.readnoise.value * np.sqrt(nreads),
                 size=(ffi.shape),
             ).astype(int)
 
             # Add poisson noise for the dark current to every frame, units of electrons
             ffi += np.random.poisson(
-                lam=(self.detector.dark_rate * int_time).value,
+                lam=(self.detector.dark * int_time).value,
                 size=ffi.shape,
             ).astype(int)
 
@@ -338,8 +352,8 @@ class VisibleSim(Sim):
             # We have to estimate the mean bias when summed across reads because the integer math messes with the mean
             test_distribution = (
                 np.random.normal(
-                    loc=self.detector.bias.value,
-                    scale=self.detector.read_noise.value,
+                    loc=np.mean(self.detector.bias.value),
+                    scale=self.detector.readnoise.value,
                     size=(nreads, 10000),
                 )
                 .astype(int)
@@ -348,13 +362,15 @@ class VisibleSim(Sim):
 
             data += np.random.normal(
                 loc=test_distribution.mean() / nr,
-                scale=self.detector.read_noise.value * np.sqrt(bin_frames),
+                scale=self.detector.readnoise.value * np.sqrt(bin_frames),
                 size=data.shape,
             ).astype(int)
 
             # Add poisson noise for the dark current to every frame, units of electrons
             data += np.random.poisson(
-                lam=(self.detector.dark_rate * integration_time.to(u.second)).value,
+                lam=(
+                    self.detector.dark * integration_time.to(u.second)
+                ).value,
                 size=data.shape,
             ).astype(int)
 
@@ -367,7 +383,9 @@ class VisibleSim(Sim):
         data[data > 2**16] = 2**16
 
         # bin down the data across the read dimension
-        data = data.reshape((self.nROIs, nframes, nr, *self.ROI_size)).sum(axis=2)
+        data = data.reshape((self.nROIs, nframes, nr, *self.ROI_size)).sum(
+            axis=2
+        )
 
         if output_type == "array":
             return data
@@ -511,7 +529,9 @@ class VisibleSim(Sim):
         n_arrs, nframes, nrows, ncols = data.shape
 
         corstime = int(
-            np.floor((start_time - Time("2000-01-01T12:00:00", scale="utc")).sec)
+            np.floor(
+                (start_time - Time("2000-01-01T12:00:00", scale="utc")).sec
+            )
         )
         finetime = int(corstime % 1 * 10**9 // 1)
 
@@ -527,7 +547,10 @@ class VisibleSim(Sim):
             corstime,
             "seconds since the TAI Epoch (12PM Jan 1, 2000)",
         )
-        primary_kwds["FINETIME"] = (finetime, "nanoseconds added to CORSTIME seconds")
+        primary_kwds["FINETIME"] = (
+            finetime,
+            "nanoseconds added to CORSTIME seconds",
+        )
         primary_hdu = fits.PrimaryHDU()
         for key, value in primary_kwds.items():
             primary_hdu.header[key] = value
@@ -536,13 +559,18 @@ class VisibleSim(Sim):
         next_square = int(np.ceil(np.sqrt(n_arrs)) ** 2)
         sq_sides = int(np.sqrt(next_square))
 
-        padding = np.zeros((next_square - n_arrs, nframes, nrows, ncols), dtype=int)
-        subarrays = np.append(data, padding, axis=0)
-        subarrays = subarrays.reshape((sq_sides, sq_sides, *data.shape[1:])).transpose(
-            [2, 0, 1, 3, 4]
+        padding = np.zeros(
+            (next_square - n_arrs, nframes, nrows, ncols), dtype=int
         )
+        subarrays = np.append(data, padding, axis=0)
+        subarrays = subarrays.reshape(
+            (sq_sides, sq_sides, *data.shape[1:])
+        ).transpose([2, 0, 1, 3, 4])
         image_data = np.block(
-            [[subarrays[:, i, j] for j in range(sq_sides)] for i in range(sq_sides)]
+            [
+                [subarrays[:, i, j] for j in range(sq_sides)]
+                for i in range(sq_sides)
+            ]
         ).astype(data.dtype)
         image_kwds = {
             "NAXIS": (3, "number of array dimensions"),

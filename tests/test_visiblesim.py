@@ -1,9 +1,11 @@
+# Third-party
 import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
 
+# First-party/Local
 from pandorasim import TESTDIR, VisibleSim
 
 
