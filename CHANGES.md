@@ -1,10 +1,12 @@
 # 1.2.0
+
 - Updated variable names for NIRsim.dark and NIRsim.readnoise to match pandorsat>0.12.2
 - Updated variable names for VisibleSim.dark and VisibleSim.readnoise to match pandorsat>0.12.2
 - Updated version number dependencies for pandorasat and pandorapsf in pyproject.toml
 - Added dev dependencies for pandorasim
 - Changed bias in detector class for NIRsim to use the mean bias from pandora_ref (i.e. not be multi-dimensional)
 - Changed noise handling in VisibleSim to use the mean bias from pandora_ref (note: underlying bias is still multi-dimensional)
+- Updated tests to use the "fallback" PSFs so the grid doesn't need to be downloaded
 
 # 1.1.1
 
