@@ -3552,14 +3552,14 @@ rich = ">=13.9.4,<14.0.0"
 
 [[package]]
 name = "pandorasat"
-version = "0.12.3"
+version = "0.12.4"
 description = ""
 optional = false
 python-versions = "<3.13,>=3.9"
 groups = ["main"]
 files = [
-    {file = "pandorasat-0.12.3-py3-none-any.whl", hash = "sha256:e23a45ebfbd138562eaa9ae323377810a18d4e8831598e4bcd6d1cead899388d"},
-    {file = "pandorasat-0.12.3.tar.gz", hash = "sha256:ed1fbf35ca0d8d420ee61bbc6349700471d08927594b5665a9519b9c04172e01"},
+    {file = "pandorasat-0.12.4-py3-none-any.whl", hash = "sha256:fb122af4f6a26dd874b589e39d91aa5dfffe41068bd4550412f3cf25ae71b70f"},
+    {file = "pandorasat-0.12.4.tar.gz", hash = "sha256:a4e3fa4b703b2b6bd1d8702ebfe884e4b42c001e111396920147bcbd399db743"},
 ]
 
 [package.dependencies]
@@ -5350,4 +5350,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<3.13"
-content-hash = "4475195616451965e974b6c828f3c11d9efc40df47d8e2300eec347689409987"
+content-hash = "cb8934ae44ce27b0077372bd457b0813312fb4aba8950fae1689171ba4764b6d"
