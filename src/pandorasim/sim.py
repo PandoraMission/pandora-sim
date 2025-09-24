@@ -23,10 +23,15 @@ class Sim(ABC):
         else:
             return f"{self.detector.name} Simulation [no pointing information]"
 
-    def __init__(self, detector):
+    def __init__(self, detector, psf=None):
         self.detector = detector
         # logger.start_spinner("Loading PSF..")
-        self.psf = pp.PSF.from_name(self.detector.name)
+        if isinstance(psf, str):
+            self.psf = pp.PSF.from_name(psf)
+        elif psf is None:
+            self.psf = pp.PSF.from_name(self.detector.name)
+        else:
+            self.psf = psf
         # logger.stop_spinner()
 
     @add_docstring("ra", "dec", "theta")

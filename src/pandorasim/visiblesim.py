@@ -26,11 +26,11 @@ logger = get_logger("pandora-sim")
 
 class VisibleSim(Sim):
     @add_docstring("ROI_size", "nROIs")
-    def __init__(self, ROI_size=(50, 50), nROIs=9, ROI_corners=None):
+    def __init__(self, ROI_size=(50, 50), nROIs=9, ROI_corners=None, psf=None):
         """
         Visible Simulator for Pandora.
         """
-        super().__init__(detector=VisibleDetector())
+        super().__init__(detector=VisibleDetector(), psf=psf)
         self.ROI_size = ROI_size
         self.nROIs = nROIs
 

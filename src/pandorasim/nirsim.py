@@ -21,11 +21,11 @@ logger = get_logger("pandora-sim")
 
 
 class NIRSim(Sim):
-    def __init__(self):
+    def __init__(self, psf=None):
         """
         NIR Simulator for Pandora.
         """
-        super().__init__(detector=NIRDetector())
+        super().__init__(detector=NIRDetector(), psf=psf)
         if "row" in self.psf.dimension_names:
             self.psf = self.psf.freeze_dimension(row=0 * u.pixel)
         if "column" in self.psf.dimension_names:
