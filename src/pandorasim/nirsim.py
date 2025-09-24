@@ -249,7 +249,9 @@ class NIRSim(Sim):
 
         # Crap gain for now because gain calculations are wicked broken
         data = (data.astype(float) * 0.5).astype(int)
-        bias = np.mean(self.bias.value * 0.5)   # Note: May want to change this to be multi-dimensional in the future
+        bias = np.mean(
+            self.bias.value * 0.5
+        )  # Note: May want to change this to be multi-dimensional in the future
         bias_std = self.bias_uncertainty.value * 0.5
         # Any pixels greater than uint16 are maxed out (saturated)
         data[(data.value + bias) > 2**16] = 2**16 * data.unit

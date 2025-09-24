@@ -368,9 +368,7 @@ class VisibleSim(Sim):
 
             # Add poisson noise for the dark current to every frame, units of electrons
             data += np.random.poisson(
-                lam=(
-                    self.detector.dark * integration_time.to(u.second)
-                ).value,
+                lam=(self.detector.dark * integration_time.to(u.second)).value,
                 size=data.shape,
             ).astype(int)
 

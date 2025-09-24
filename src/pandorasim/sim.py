@@ -219,10 +219,14 @@ class Sim(ABC):
         ).value
 
         k = (
-            np.abs(pix_coords[0] - shape[0] / 2 - self.detector.naxis2.value/2)
+            np.abs(
+                pix_coords[0] - shape[0] / 2 - self.detector.naxis2.value / 2
+            )
             < (shape[0] / 2 + self.psf_shape[0] / 2)
         ) & (
-            np.abs(pix_coords[1] - shape[1] / 2 - self.detector.naxis1.value/2)
+            np.abs(
+                pix_coords[1] - shape[1] / 2 - self.detector.naxis1.value / 2
+            )
             < (shape[1] / 2 + self.psf_shape[1] / 2)
         )
 
