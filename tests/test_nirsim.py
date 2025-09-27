@@ -1,9 +1,9 @@
 # Third-party
 import astropy.units as u
 import matplotlib.pyplot as plt
+import pandorasat as ps
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
-import pandorasat as ps
 
 # First-party/Local
 from pandorasim import TESTDIR, NIRSim
@@ -16,7 +16,9 @@ def test_nir():
     self = NIRSim(psf="nirda_fallback")
     self.point(ra=c.ra, dec=c.dec, roll=-40 * u.deg)
     _ = self.show_subarray()
-    plt.savefig(TESTDIR + "output/test_subarray.png", dpi=150, bbox_inches="tight")
+    plt.savefig(
+        TESTDIR + "output/test_subarray.png", dpi=150, bbox_inches="tight"
+    )
     plt.close("all")
 
     hdulist = self.observe()
