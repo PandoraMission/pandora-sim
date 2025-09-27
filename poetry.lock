@@ -3532,14 +3532,14 @@ sparse3d = ">=1.0.3"
 
 [[package]]
 name = "pandoraref"
-version = "0.1.3"
+version = "0.1.5"
 description = ""
 optional = false
 python-versions = "<3.13,>=3.9"
 groups = ["main"]
 files = [
-    {file = "pandoraref-0.1.3-py3-none-any.whl", hash = "sha256:98f3e74662c8d16bee1fcb8266ac387a9ba8ec5a5523bc7c7fcee3bdd1f4e695"},
-    {file = "pandoraref-0.1.3.tar.gz", hash = "sha256:f456bc2bcf6b49bbebba89bb0741f7b67211568dc3ed5e2061395c2e957125fd"},
+    {file = "pandoraref-0.1.5-py3-none-any.whl", hash = "sha256:758c7f1e9fead33730f9b6a4bcafcc3ce845202c459dcae1c2f5a7861e4cd283"},
+    {file = "pandoraref-0.1.5.tar.gz", hash = "sha256:096675f528d8e9c58c3a4239ee44a1369b2f3175eca3891244fef5cfa871b676"},
 ]
 
 [package.dependencies]
@@ -3547,19 +3547,18 @@ appdirs = ">=1.4.4,<2.0.0"
 astropy = ">=6.0.0"
 numpy = ">=1.2"
 pandas = ">=2.2.3,<3.0.0"
-pandorasat = ">=0.11.0"
 rich = ">=13.9.4,<14.0.0"
 
 [[package]]
 name = "pandorasat"
-version = "0.12.4"
+version = "0.12.6"
 description = ""
 optional = false
 python-versions = "<3.13,>=3.9"
 groups = ["main"]
 files = [
-    {file = "pandorasat-0.12.4-py3-none-any.whl", hash = "sha256:fb122af4f6a26dd874b589e39d91aa5dfffe41068bd4550412f3cf25ae71b70f"},
-    {file = "pandorasat-0.12.4.tar.gz", hash = "sha256:a4e3fa4b703b2b6bd1d8702ebfe884e4b42c001e111396920147bcbd399db743"},
+    {file = "pandorasat-0.12.6-py3-none-any.whl", hash = "sha256:5a0f0126c752432c546c37c65c016bf5225ff3ebaae8e752d7a05003eacd182a"},
+    {file = "pandorasat-0.12.6.tar.gz", hash = "sha256:1f1a6d1729c8449658b09cae91e5c2200257bfca372922b1185edbb09619f6e4"},
 ]
 
 [package.dependencies]
@@ -3570,7 +3569,7 @@ matplotlib = ">=3.8.0"
 numpy = ">=1.26.0"
 openpyxl = ">=3.1.5,<4.0.0"
 pandas = {version = ">=2.2.3,<3.0.0", extras = ["tabulate"]}
-pandoraref = ">=0.1.3"
+pandoraref = ">=0.1.5"
 pyarrow = "<20.0.0"
 rich = ">=13.0.0"
 scipy = ">=1.11.2"
@@ -5350,4 +5349,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<3.13"
-content-hash = "cb8934ae44ce27b0077372bd457b0813312fb4aba8950fae1689171ba4764b6d"
+content-hash = "fba9943ea5e7066b1d3a6019ed771d496f751e2573b5e8f96cc9aaba33d70b98"

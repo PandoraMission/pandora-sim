@@ -7,8 +7,9 @@ authors = ["Christina Hedges <christina.l.hedges@nasa.gov>"]
 [tool.poetry.dependencies]
 pyarrow = "<17.0.0"
 python = ">=3.9,<3.13"
-pandorasat = ">=0.12.4"
+pandorasat = ">=0.12.6"
 pandorapsf = ">=0.7.0"
+pandoraref = ">=0.1.5"
 
 [tool.poetry.group.dev]
 optional = true

@@ -44,6 +44,8 @@ class Sim(ABC):
 
         # logger.start_spinner("Finding nearby sources...")
         self.source_catalog = self._get_source_catalog()
+
+        self.source_catalog.fillna({"teff": 5777, "logg": 5.0}, inplace=True)
         self.locations = np.asarray(
             [self.source_catalog.row, self.source_catalog.column]
         ).T
@@ -224,14 +226,10 @@ class Sim(ABC):
         ).value
 
         k = (
-            np.abs(
-                pix_coords[0] - shape[0] / 2 - self.detector.naxis2.value / 2
-            )
+            np.abs(pix_coords[0] - self.wcs.wcs.crpix[1])
             < (shape[0] / 2 + self.psf_shape[0] / 2)
         ) & (
-            np.abs(
-                pix_coords[1] - shape[1] / 2 - self.detector.naxis1.value / 2
-            )
+            np.abs(pix_coords[1] - self.wcs.wcs.crpix[0])
             < (shape[1] / 2 + self.psf_shape[1] / 2)
         )
 

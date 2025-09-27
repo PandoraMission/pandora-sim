@@ -67,8 +67,8 @@ class NIRSim(Sim):
         self.tracescene = pp.TraceScene(
             self.locations,
             psf=self.psf,
-            shape=self.subarray_size,
-            corner=(0, 0),
+            shape=self.detector.subarray_size,
+            corner=self.detector.subarray_corner,
             wavelength=self.wavelength,
             # wav_bin=1,
         )
