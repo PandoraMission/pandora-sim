@@ -1,15 +1,17 @@
+# Third-party
 import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
 
+# First-party/Local
 from pandorasim import TESTDIR, VisibleSim
 
 
 def test_visible():
     c = SkyCoord.from_name("Kepler-10")
-    self = VisibleSim(nROIs=9)
+    self = VisibleSim(nROIs=9, psf="visda_fallback")
     self.point(ra=c.ra, dec=c.dec, roll=-40 * u.deg)
     _ = self.show_FFI()
     plt.savefig(TESTDIR + "output/test_FFI.png", dpi=150, bbox_inches="tight")

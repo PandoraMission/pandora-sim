@@ -1,6 +1,8 @@
+# Standard library
 import functools
 from typing import Callable
 
+# Third-party
 from astropy.time import Time
 
 PARAMETERS_DOCSTRINGS = {
@@ -93,9 +95,7 @@ def add_docstring(*param_names):
                     dtype_str += " or None" if None in dtype else ""
                 else:
                     dtype_str = dtype.__name__
-                param_docstring += (
-                    f"{indent_str}{name} : {dtype_str}\n{indent_str}    {desc}\n"
-                )
+                param_docstring += f"{indent_str}{name} : {dtype_str}\n{indent_str}    {desc}\n"
         existing_docstring = func.__doc__ or ""
         if "Parameters" in existing_docstring:
             func.__doc__ = (

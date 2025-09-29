@@ -99,7 +99,9 @@ def get_simple_cosmic_ray_image(
     return u.Quantity(im, dtype=int, unit=u.DN)
 
 
-def get_planets(coord: SkyCoord, radius: u.Quantity = 20 * u.arcsecond) -> dict:
+def get_planets(
+    coord: SkyCoord, radius: u.Quantity = 20 * u.arcsecond
+) -> dict:
     """Largish default radius for high proper motion targets this breaks
     Returns a dictionary of dictionaries with planet parameters.
     """
@@ -116,9 +118,9 @@ def get_planets(coord: SkyCoord, radius: u.Quantity = 20 * u.arcsecond) -> dict:
             attrs = ["pl_orbper", "pl_tranmid", "pl_trandur", "pl_trandep"]
             planets = {
                 letter: {
-                    attr: planets_tab[planets_tab["pl_letter"] == letter][attr][
-                        0
-                    ].unmasked
+                    attr: planets_tab[planets_tab["pl_letter"] == letter][
+                        attr
+                    ][0].unmasked
                     for attr in attrs
                 }
                 for letter in planets_tab["pl_letter"]
@@ -249,7 +251,9 @@ def get_integrations(
     for idx in np.arange(SC_Integrations - 1):
         integrations.append(copy(cintn))
 
-    integrations[-1].append(np.zeros(SC_DropFrames3, int) + FRAME_BIT_DICT["drop"])
+    integrations[-1].append(
+        np.zeros(SC_DropFrames3, int) + FRAME_BIT_DICT["drop"]
+    )
     return integrations
 
 
@@ -334,7 +338,9 @@ def plot_nirda_integrations(
         SC_Integrations,
     )
     cadences = [
-        np.sum([(i == FRAME_BIT_DICT["read"]).all() for i in inte if len(i) > 0])
+        np.sum(
+            [(i == FRAME_BIT_DICT["read"]).all() for i in inte if len(i) > 0]
+        )
         for inte in integrations
     ]
     integrations = [np.hstack(idx) for idx in integrations]

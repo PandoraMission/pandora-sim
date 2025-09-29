@@ -1,17 +1,24 @@
+# Third-party
 import astropy.units as u
 import matplotlib.pyplot as plt
+import pandorasat as ps
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
 
+# First-party/Local
 from pandorasim import TESTDIR, NIRSim
 
 
-def test_visible():
+def test_nir():
+    # force vega spectrum to be available
+    ps.phoenix.download_vega()
     c = SkyCoord.from_name("Kepler-10")
-    self = NIRSim()
+    self = NIRSim(psf="nirda_fallback")
     self.point(ra=c.ra, dec=c.dec, roll=-40 * u.deg)
     _ = self.show_subarray()
-    plt.savefig(TESTDIR + "output/test_subarray.png", dpi=150, bbox_inches="tight")
+    plt.savefig(
+        TESTDIR + "output/test_subarray.png", dpi=150, bbox_inches="tight"
+    )
     plt.close("all")
 
     hdulist = self.observe()
